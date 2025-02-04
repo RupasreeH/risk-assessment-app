@@ -1,0 +1,32 @@
+version: "3.10"
+services:
+  web:
+    build:
+      context: .
+    ports:
+      - "5757:5757"
+    environment:
+      - FLASK_ENV=development
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: riskassessment
+      MYSQL_USER: user1
+      MYSQL_PASSWORD: password1
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+
+volumes:
+  mysql_data:
