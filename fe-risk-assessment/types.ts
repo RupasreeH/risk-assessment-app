@@ -152,6 +152,16 @@ export type AuthContextType = {
   search: (
     search: string
   ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
+  userDetails: (
+    email: string
+  ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
+  updateUser: (
+    firstName: string,
+    lastName: string,
+    email: string,
+    oldPassword: string,
+    newPassword: string
+  ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
 };
 
 export type ResponseType = {

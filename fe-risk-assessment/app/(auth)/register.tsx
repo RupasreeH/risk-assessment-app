@@ -83,7 +83,7 @@ const Register = () => {
         {/* Register form */}
         <View style={styles.form}>
           <Typo size={16} color={colors.textLight}>
-            Create an account to tract your risk score
+            Create an account to track your risk score
           </Typo>
           <Input
             placeholder="Enter your first name"

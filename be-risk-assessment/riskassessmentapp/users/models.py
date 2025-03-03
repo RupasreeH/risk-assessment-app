@@ -12,7 +12,7 @@ class User(db.Model, UserMixin):
     password = db.Column(db.String(255), nullable=False)
 
     def __repr__(self):
-        return f'<User: {self.username}>'
+        return f'<User: {self.email}>'
     
     def get_id(self):
         return self.uid
@@ -24,4 +24,3 @@ class User(db.Model, UserMixin):
             "firstName":self.first_name,
             "lastName":self.last_name
         }
-        

@@ -87,6 +87,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const userDetails = async (email: string) => {
+    try {
+      const rawResponse = await fetch(`${url}/users/details?email=${email}`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+      const content = await rawResponse.json();
+      return { success: true, msg: content, status_code: rawResponse.status };
+    } catch (error: any) {
+      let msg = error.message;
+      return { success: false, msg };
+    }
+  };
+
+  const updateUser = async (
+    firstName: string,
+    lastName: string,
+    email: string,
+    oldPassword: string,
+    newPassword: string
+  ) => {
+    try {
+      const response = await fetch(`${url}/users/update-user`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: firstName,
+          lastName: lastName,
+          email: email,
+          oldPassword: oldPassword,
+          newPassword: newPassword,
+        }),
+      });
+      const content = await response.json();
+      return { success: true, msg: content, status_code: response.status };
+    } catch (error: any) {
+      let msg = error.message;
+      return { success: false, msg };
+    }
+  };
+
   const contextValue: AuthContextType = {
     user,
     setUser,
@@ -95,6 +141,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     search,
     results,
     setResults,
+    userDetails,
+    updateUser,
   };
 
   return (
