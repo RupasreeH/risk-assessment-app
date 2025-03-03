@@ -1,9 +1,12 @@
 from flask import make_response, request, jsonify, Blueprint
 from flask_login import login_user, logout_user, current_user, login_required
+from flask_mail import Message
 
 import uuid
+import random
+import string
 
-from riskassessmentapp.extensions import db, bcrypt
+from riskassessmentapp.extensions import db, bcrypt, mail
 
 from riskassessmentapp.users.models import User
 
@@ -150,6 +153,45 @@ def updateUserDetails():
     db.session.commit()
 
     response = make_response(jsonify({'message': 'Successfully updated!', 'user': user.to_json_response()}))
+    response.status_code = 200
+    response.headers['content-type'] = 'application/json'
+    return response
+
+@users.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    required_fields = ["email"]
+    if not all(field in request.json for field in required_fields):
+        response = make_response(jsonify({'message': 'Fields are missing'}))
+        response.status_code = 400
+        response.headers['content-type'] = 'application/json'
+        return response
+    
+    email = request.json['email']
+
+    user = User.query.filter(User.email == email).first()
+
+    if not user:
+        response = make_response(jsonify({'message': 'User not found', 'user': {}}))
+        response.status_code = 400
+        response.headers['content-type'] = 'application/json'
+        return response
+    
+    # Send email
+    subject = "Temporary Password Request"
+
+    characters = string.ascii_letters + string.digits  # a-z, A-Z, 0-9
+    temp_pass = ''.join(random.choices(characters, k=10))
+
+    user.password = bcrypt.generate_password_hash(temp_pass)
+
+    db.session.commit()
+
+    msg_body = f"Your temporary password to login to app is {temp_pass}. Please use this password and update your new password from Profile page."
+
+    msg = Message(subject, recipients=[email], body=msg_body)
+    mail.send(msg)
+
+    response = make_response(jsonify({'message': 'Temporary password email sent! Check your inbox.', 'user': {}}))
     response.status_code = 200
     response.headers['content-type'] = 'application/json'
     return response

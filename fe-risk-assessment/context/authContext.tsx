@@ -133,6 +133,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const forgotPassword = async (email: string) => {
+    try {
+      const response = await fetch(`${url}/users/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+        }),
+      });
+      const content = await response.json();
+      return { success: true, msg: content, status_code: response.status };
+    } catch (error: any) {
+      let msg = error.message;
+      return { success: false, msg };
+    }
+  };
+
   const contextValue: AuthContextType = {
     user,
     setUser,
@@ -143,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setResults,
     userDetails,
     updateUser,
+    forgotPassword,
   };
 
   return (

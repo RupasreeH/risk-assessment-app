@@ -1,4 +1,11 @@
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import React, { useRef, useState } from "react";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import Typo from "@/components/Typo";
@@ -54,6 +61,11 @@ const Login = () => {
       lastName: user.lastName,
     });
   };
+
+  const onForgotPassword = () => {
+    router.push("/(modals)/forgotPassword");
+  };
+
   return (
     <ScreenWrapper>
       <View style={styles.container}>
@@ -96,6 +108,14 @@ const Login = () => {
               />
             }
           />
+          <TouchableOpacity
+            style={{ alignSelf: "flex-end" }}
+            onPress={() => onForgotPassword()}
+          >
+            <Typo size={14} color={colors.text}>
+              Forgot Password?
+            </Typo>
+          </TouchableOpacity>
 
           <Button loading={isLoading} onPress={handleSubmit}>
             <Typo fontWeight={"700"} color={colors.white} size={21}>

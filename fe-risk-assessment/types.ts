@@ -162,6 +162,9 @@ export type AuthContextType = {
     oldPassword: string,
     newPassword: string
   ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
+  forgotPassword: (
+    email: string
+  ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
 };
 
 export type ResponseType = {

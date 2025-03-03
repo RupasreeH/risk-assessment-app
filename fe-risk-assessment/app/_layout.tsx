@@ -18,6 +18,12 @@ const StackLayout = () => {
           presentation: "modal",
         }}
       />
+      <Stack.Screen
+        name="(modals)/forgotPassword"
+        options={{
+          presentation: "modal",
+        }}
+      />
     </Stack>
   );
 };
