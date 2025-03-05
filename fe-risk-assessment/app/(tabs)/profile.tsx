@@ -14,7 +14,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRouter } from "expo-router";
 
 const Profile = () => {
-  const { setUser, user } = useAuth();
+  const { setUser, user, setResults } = useAuth();
   const router = useRouter();
   const accountOptions: accountOptionType[] = [
     {
@@ -40,6 +40,7 @@ const Profile = () => {
   const handlePress = (item: accountOptionType) => {
     if (item.title === "Logout") {
       setUser(null);
+      setResults(null);
     }
     if (item.routeName) router.push(item.routeName);
   };
