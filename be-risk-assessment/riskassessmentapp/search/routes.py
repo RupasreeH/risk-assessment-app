@@ -14,8 +14,6 @@ from flask import Flask, jsonify, request, Blueprint
 from math import exp
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from sentence_transformers import SentenceTransformer, util  # Import SBERT and cosine similarity
-from transformers import pipeline, BertTokenizer, BertForTokenClassification  # New imports for advanced gender detection
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from openai import OpenAI
 from dotenv import load_dotenv
 import ast
@@ -79,7 +77,7 @@ def clean_scraped_data(soup, query_name):
 
     return final_cleaned_data
 
-def extract_pii_with_gpt(data_into_list, attributes, model="gpt-4o-mini"):
+def extract_pii_with_gpt(data_into_list, attributes, target_name, model="gpt-4o"):
     """
     Extract PII attributes using GPT and store results in the existing attributes dictionary.
 
@@ -93,22 +91,52 @@ def extract_pii_with_gpt(data_into_list, attributes, model="gpt-4o-mini"):
     """
     # Combine the data into a single input for GPT
     input_data = "\n".join(data_into_list)
+    print(target_name)
 
     # Define system and user prompts
     system_prompt = (
-        "You are an advanced NLP assistant specializing in extracting Personally Identifiable Information (PII). "
-        "When you cannot find any information for an attribute, explicitly return an empty list `[]` for that attribute."
+        f"You are an advanced NLP assistant specializing in extracting Personally Identifiable Information (PII) from unstructured text. "
+        f"Extract PII only for the individual named: {target_name}. Ignore any PII that does not belong to this person. "
+        f"If certain attributes are missing, explicitly return an empty string for those fields. "
+        f"Ensure extracted data follows the correct structure and is free from formatting errors."
     )
-           # Construct the prompt
-    prompt = (
-            "Extract PII information from the following text document:\n"
-            f"{input_data}\n\n"
-            "Return results in dictionary format with these attributes:\n"
-            "{'Name': '', 'Location': '', 'Email': '', 'Phone': '', 'DOB': '', 'Address': '', 'Gender': '', "
-            "'Employer': '', 'Education': '', 'Birth Place': '', 'Personal Cell': '', 'Business Phone': '', "
-            "'Facebook Account': '', 'Twitter Account': '', 'Instagram Account': '', 'DDL': '', "
-            "'Passport': '', 'Credit Card': '', 'SSN': ''}. If no value exists for an attribute, return an empty string."
-        )
+
+    user_prompt = (
+        "Extract all possible Personally Identifiable Information (PII) from the following unstructured document:\n\n"
+        f"{input_data}\n\n"
+        "Follow these strict guidelines while extracting PII:\n"
+        "1. Extract Name, Location, Email, Phone, DOB, Address, Gender, Employer, Education, Birth Place, Personal Cell, "
+        "Business Phone, Social Media Accounts (Facebook, Twitter, Instagram), Driver’s License (DDL), Passport, Credit Card, and SSN.\n"
+        "2. If a field is missing or unidentifiable, return an empty string `''` for that attribute.\n"
+        "3. Preserve full names, emails, and phone numbers without modifying their structure.\n"
+        "4. Extract dates (such as DOB) in `MM-DD-YYYY` format where possible.\n"
+        "5. If the document is unstructured and includes multiple individuals, locate {target_name} and extract only their PII.\n"
+        "6. If multiple values exist for an attribute (e.g., multiple emails), return them as a **comma-separated string**.\n"
+        "7. Do **not** include extra text, explanations, or additional details outside of the requested attributes.\n\n"
+        "Format the final response as a **valid JSON dictionary**:\n"
+        "{\n"
+        "  'Name': '',\n"
+        "  'Location': '',\n"
+        "  'Email': '',\n"
+        "  'Phone': '',\n"
+        "  'DOB': '',\n"
+        "  'Address': '',\n"
+        "  'Gender': '',\n"
+        "  'Employer': '',\n"
+        "  'Education': '',\n"
+        "  'Birth Place': '',\n"
+        "  'Personal Cell': '',\n"
+        "  'Business Phone': '',\n"
+        "  'Facebook Account': '',\n"
+        "  'Twitter Account': '',\n"
+        "  'Instagram Account': '',\n"
+        "  'DDL': '',\n"
+        "  'Passport': '',\n"
+        "  'Credit Card': '',\n"
+        "  'SSN': ''\n"
+        "}\n"
+        "Ensure the response is **valid JSON** without extra text or explanations."
+    )
     extracted_pii = None  # Initialize the variable to avoid reference errors
 
     try:
@@ -117,9 +145,9 @@ def extract_pii_with_gpt(data_into_list, attributes, model="gpt-4o-mini"):
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,  # Lower temperature for consistent output
+            temperature=0.2,  # Lower temperature for consistent output
             max_tokens=15000   # Adjust based on expected input/output size
         )
 
@@ -303,6 +331,66 @@ def calculate_overall_risk_score(pii_attributes, weights, willingness_measures, 
             overall_risk_score += weight * privacy_score
     return overall_risk_score
 
+
+async def check_webpage_relevance(html_content, target_name):
+    """
+    Checks if the webpage content is relevant to the target person by using GPT.
+
+    Args:
+        html_content (str): The raw HTML content of the webpage
+        target_name (str): The name of the person being searched for
+
+    Returns:
+        bool: True if the webpage is relevant to the target person, False otherwise
+    """
+    # Clean HTML to extract text
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Get text and clean it
+    parsed_text = soup.get_text()
+    text = parsed_text.split('\n')
+    text = list(filter(lambda x: x not in ('', '\r'), text))
+
+    # Join the first portion of the text (to keep API calls smaller)
+    # Using only the first 10000 characters to avoid large API calls
+    sample_text = ' '.join(text)[:10000]
+    print("this is sample text", sample_text)
+
+    system_prompt = (
+        f"You are an AI assistant that determines if a webpage contains information about a specific person. If you find the '{target_name}' at least once, it is considered relevant."
+        f"The person we're looking for is named '{target_name}'. "
+        f"Analyze the text and determine if this webpage contains information about this specific person. "
+        f"The full name '{target_name}' should appear at least once, and there is no need of context should indicate "
+    )
+
+    user_prompt = (
+        f"Is the following webpage content about {target_name}? Answer with just 'yes' if the webpage "
+        f"is clearly about this specific person, or 'no' if it's not or you're unsure.\n\n"
+        f"Webpage content:\n{sample_text}"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # Using the faster model for this filtering task
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.1,  # Low temperature for more deterministic output
+            max_tokens=10  # We only need a yes/no answer
+        )
+
+        answer = response.choices[0].message.content.strip().lower()
+        is_relevant = answer == 'yes'
+
+        print(f"Relevance check for {target_name}: {is_relevant}")
+        return is_relevant
+
+    except Exception as e:
+        print(f"Error in relevance checking: {e}")
+        # In case of error, we'll include the content to avoid missing potentially relevant data
+        return True
+
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(aiohttp.ClientError))
 async def fetch_url(session, url):
     headers = {
@@ -314,7 +402,7 @@ async def fetch_url(session, url):
 
 async def scrape_google_results(query):
     tasks = []
-    #urls = [url for url in search(query, num=21, stop=10, pause=2)]
+    #urls = [url for url in search(query, tld="com", num=21, stop=21, pause=2)]
     urls = []
     for url in search(query, num_results=21, safe=None):
         urls.append(url)
@@ -327,24 +415,68 @@ async def scrape_google_results(query):
         print(f"{idx}. {url}")
 
     print(f"\nTotal URLs to be scraped: {len(urls)}")
+
+    relevant_responses = []
+    relevant_urls = []
+    no_relevant_data = True
+
     async with ClientSession() as session:
         for url in urls:
             if not (url.endswith('.pdf') or '-image?' in url):
                 tasks.append(fetch_url(session, url))
         responses = await asyncio.gather(*tasks, return_exceptions=True)
-    return responses, urls
+
+        # Check relevance for each response
+        for idx, response in enumerate(responses):
+            if isinstance(response, Exception):
+                print(f"Error fetching URL {urls[idx]}: {response}")
+                continue
+
+            # Check if the webpage is relevant to the target person
+            try:
+                is_relevant = await check_webpage_relevance(response, query)
+
+                if is_relevant:
+                    print(f"✅ URL is relevant: {urls[idx]}")
+                    relevant_responses.append(response)
+                    relevant_urls.append(urls[idx])
+                    no_relevant_data = False
+                else:
+                    print(f"❌ URL is not relevant: {urls[idx]}")
+            except Exception as e:
+                print(f"Error checking relevance for {urls[idx]}: {e}")
+                # On error, include the response to avoid missing potentially relevant data
+                relevant_responses.append(response)
+                relevant_urls.append(urls[idx])
+                no_relevant_data = False
+
+    if no_relevant_data:
+        print("No relevant webpages found for the target person.")
+
+    return relevant_responses, relevant_urls, no_relevant_data
+
 
 @risksearch.route('/', methods=["GET"])
 async def risk_search():
     execution_start = time.time()
     query = request.args.get('searchName', '')
+    print("this is query name", query)
+    target_name = query
     if not query:
         return jsonify({"error": "No search query provided"}), 400
+    # Check if person exists using Google Knowledge Graph API
+    '''exists = await check_person_existence(query)
+    if not exists:
+         return jsonify({"message": "No Data Found."})'''
 
     data_into_list = []
 
     try:
-        responses, urls = await scrape_google_results(query)
+        responses, urls, no_relevant_data = await scrape_google_results(query)
+
+        if no_relevant_data:
+            return jsonify({"message": "No Data Found."})
+
         for idx, response in enumerate(responses):
             if isinstance(response, Exception):
                 print(f"Error fetching URL {urls[idx]}: {response}")
@@ -364,16 +496,15 @@ async def risk_search():
                     if idx == 20 and 'https://' in line:
                         line = line.replace('https://', ' https://')
                     aligned_line = align_sentence(line.strip())
-                    #print(aligned_line)
                     data_into_list.append(aligned_line)
                     splitted_lines_list = re.split(r'\. |\.\[', aligned_line)
                     #data_into_list.extend(splitted_lines_list)
         #extracted_addresses = address_pattern(data_into_list, query)
 
         # Print relevant sentences
-        '''print("\n=== Relevant Sentences ===")
+        print("\n=== Relevant Sentences ===")
         for line in data_into_list:
-            print(line)'''
+            print(line)
 
         output_match_term = []
         output_word = []
@@ -415,7 +546,10 @@ async def risk_search():
             'SSN': set()
         }
 
-        attributes = extract_pii_with_gpt(data_into_list, attributes)
+        if not data_into_list:
+            return jsonify({"message": "No Data Found."})
+
+        attributes = extract_pii_with_gpt(data_into_list, attributes,target_name)
 
         def print_attributes(attributes):
             """
@@ -431,130 +565,6 @@ async def risk_search():
 
         print_attributes(attributes)
 
-        '''for line_no, line in enumerate(data_into_list):
-            email_matches = re.finditer(r'\S+@\S+', line)
-            for m in email_matches:
-                attributes['Email'].add(m.group(0))
-                match_count = sum(1 for name in name_split if m.group(0).lower().find(name) >= 0)
-                inp_list = ['Email', m.group(0), line, m.start(), m.end(), query, 0, line_no, match_count]
-                append_list(output_match_term, output_word, output_line, output_list_span_start, output_list_span_end,
-                            output_list_search, output_list_url_no, output_list_line_no, output_list_match_count,
-                            inp_list)
-
-            for pattern in phone_pattern:
-                for m in re.finditer(pattern, line):
-                    attributes['Phone'].add(m.group(0))
-                    match_count = sum(1 for name in name_split if line.lower().find(name) >= 0)
-                    inp_list = ['Phone', m.group(0), line, m.start(), m.end(), query, 0, line_no, match_count]
-                    append_list(output_match_term, output_word, output_line, output_list_span_start,
-                                output_list_span_end, output_list_search, output_list_url_no, output_list_line_no,
-                                output_list_match_count, inp_list)
-
-            pattern_values = dob_pattern(line)
-            if pattern_values:
-                attributes['DoB'].add(pattern_values[1])
-                match_count = sum(1 for name in name_split if line.lower().find(name) >= 0)
-                inp_list = [pattern_values[0], pattern_values[1], line, pattern_values[2], pattern_values[3], query, 0,
-                            line_no, match_count]
-                append_list(output_match_term, output_word, output_line, output_list_span_start, output_list_span_end,
-                            output_list_search, output_list_url_no, output_list_line_no, output_list_match_count,
-                            inp_list)
-
-            pattern_values = address_pattern(line)
-            if pattern_values:
-                attributes['Address'].add(pattern_values[1])
-                match_count = sum(1 for name in name_split if line.lower().find(name) >= 0)
-                inp_list = [pattern_values[0], pattern_values[1], line, pattern_values[2], pattern_values[3], query, 0,
-                            line_no, match_count]
-                append_list(output_match_term, output_word, output_line, output_list_span_start, output_list_span_end,
-                            output_list_search, output_list_url_no, output_list_line_no, output_list_match_count,
-                            inp_list)
-            # Call the modified address_pattern function to extract all relevant addresses
-            extracted_addresses = address_pattern(data_into_list, query)
-
-            # Process each extracted address
-            for address in extracted_addresses:
-                # Add the address directly to attributes['Address']
-                attributes['Address'].add(address)
-
-                # Create an input list (inp_list) for this address with relevant data
-                inp_list = ["Address", address, " ".join(data_into_list), 0, 0, query, 0, 0, 0]
-
-                # Append details of each address found to output lists
-                append_list(output_match_term, output_word, output_line, output_list_span_start, output_list_span_end,
-                            output_list_search, output_list_url_no, output_list_line_no, output_list_match_count,
-                            inp_list)
-
-            gender = gender_pattern(line)
-            if gender:
-                attributes['Gender'].add(gender)
-
-            education = education_pattern(line)
-            if education:
-                attributes['Education'].add(education)
-
-            birth_place = birth_place_pattern(line)
-            if birth_place:
-                attributes['Birth Place'].add(birth_place)
-
-            ssn = ssn_pattern(line)
-            if ssn:
-                attributes['SSN'].add(ssn)
-
-            passport = passport_pattern(line)
-            if passport:
-                attributes['Passport #'].add(passport)
-
-            credit_card = credit_card_pattern(line)
-            if credit_card:
-                attributes['Credit Card'].add(credit_card)
-
-            ddl = ddl_pattern(line)
-            if ddl:
-                attributes['DDL'].add(ddl)
-
-            business_phone = business_phone_pattern(line)
-            if business_phone:
-                attributes['Business Phone'].add(business_phone)
-
-            if idx == 20:
-                social_media_list = []
-                if '.linkedin.com' in line:
-                    social_media_list.append('.linkedin.com')
-                if 'https://www.instagram.com' in line:
-                    social_media_list.append('https://www.instagram.com')
-                if 'https://www.facebook.com' in line:
-                    social_media_list.append('https://www.facebook.com')
-                if 'twitter.com' in line:
-                    social_media_list.append('twitter.com')
-
-                if social_media_list:
-                    out_social_med_list = find_social_media_acnt(social_media_list, line)
-                    match_count = sum(1 for name in name_split if out_social_med_list[0][0].lower().find(name) >= 0)
-                    inp_list = [out_social_med_list[0][1], out_social_med_list[0][0], line, '', '', query, 0, line_no,
-                                match_count]
-                    append_list(output_match_term, output_word, output_line, output_list_span_start,
-                                output_list_span_end, output_list_search, output_list_url_no, output_list_line_no,
-                                output_list_match_count, inp_list)
-
-            doc = nlp(line.strip())
-            for ent in doc.ents:
-                if ent.label_ == 'PERSON':
-                    attributes['Name'].add(ent.text.strip())
-                elif ent.label_ == 'ORG':
-                    attributes['Employer'].add(ent.text.strip())
-                elif ent.label_ == 'GPE':
-                    location = ent.text.strip()
-                    if ',' in location:
-                        city, country = [part.strip() for part in location.split(',', 1)]
-                    else:
-                        city, country = location, None
-                    if country:
-                        if country not in attributes['Location']:
-                            attributes['Location'][country] = set()
-                        attributes['Location'][country].add(city)
-
-        attributes['Location'] = {country: list(cities) for country, cities in attributes['Location'].items()}'''
 
         dictionary = {key: list(value) for key, value in attributes.items()}
 

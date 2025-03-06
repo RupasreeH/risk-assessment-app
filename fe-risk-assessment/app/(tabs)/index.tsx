@@ -57,7 +57,7 @@ const Home = () => {
         />
       </View>
       {isLoading && <Loading showSuggestions={true} />}
-      {results && (
+      {results?.risk_score > 0 && (
         <View style={styles.container}>
           <GaugeMeter
             percentage={results.risk_score}
@@ -66,13 +66,20 @@ const Home = () => {
           />
         </View>
       )}
-      {results && (
+      {results?.risk_score > 0 && (
         <View style={{ padding: 10 }}>
           <Button loading={isLoading} onPress={() => router.push("/details")}>
             <Typo fontWeight={"700"} color={colors.white} size={21}>
               More Details
             </Typo>
           </Button>
+        </View>
+      )}
+      {results?.risk_score === 0 && (
+        <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
+          <Typo fontWeight={"500"} color={colors.neutral500} size={25}>
+            No Data Found
+          </Typo>
         </View>
       )}
     </ScreenWrapper>
