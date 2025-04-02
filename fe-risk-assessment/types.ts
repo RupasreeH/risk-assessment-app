@@ -213,7 +213,10 @@ export type SearchResult = {
 };
 
 export interface Choice {
-  label: string;
+  title: string;
+  description: string;
+  url: string;
+  keywords: string;
   value: boolean;
 }
 

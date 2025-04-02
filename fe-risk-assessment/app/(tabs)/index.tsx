@@ -17,27 +17,50 @@ import ChoiceList from "@/components/ChoiceList";
 
 const Home = () => {
   const [isLoading, setIsloading] = useState(false);
-  const { search, results, setResults } = useAuth();
+  const { search, results, setResults, extract } = useAuth();
   const searchRef = useRef("");
   const router = useRouter();
   const [showCheckBox, setShowCheckBox] = useState(false);
+  const [checkBoxList, setCheckBoxList] = useState([]);
+  const [selectUrlList, setSelectUrlList] = useState<string[]>([]);
+  const [disableInput, setDisableInput] = useState(false);
+
+  const prepareCheckBoxList = (results: any) => {
+    if (!results || !results.webpages || results.webpages.length <= 0) {
+      return [];
+    }
+    return results.webpages.map((result: any) => ({
+      ...result,
+      value: false,
+    }));
+  };
 
   const handleSearch = async () => {
     setResults(null);
+    setIsloading(true);
+    setDisableInput(true);
+    const res = await search(searchRef.current);
+    setCheckBoxList(prepareCheckBoxList(res.msg));
     setShowCheckBox(true);
+    setIsloading(false);
   };
 
   const handleChoice = (item: Choice) => {
-    console.log(item);
+    setSelectUrlList((prevList) =>
+      item.value === false
+        ? [...prevList, item.url]
+        : prevList.filter((url) => item.url !== url)
+    );
   };
 
   const handleSubmit = async () => {
     setShowCheckBox(false);
     setResults(null);
     setIsloading(true);
-    const res = await search(searchRef.current);
+    const res = await extract(searchRef.current, selectUrlList);
     setResults(res.msg);
     setIsloading(false);
+    setDisableInput(false);
   };
 
   return (
@@ -46,13 +69,13 @@ const Home = () => {
         <Input
           placeholder="Enter name"
           onChangeText={(value) => (searchRef.current = value)}
-          editable={!isLoading}
+          editable={!disableInput}
           endicon={
             <View
               style={[
                 styles.endIcon,
                 {
-                  backgroundColor: isLoading
+                  backgroundColor: disableInput
                     ? colors.neutral400
                     : colors.primary,
                 },
@@ -71,14 +94,7 @@ const Home = () => {
       </View>
       {showCheckBox && (
         <View style={styles.checkBoxContainer}>
-          <ChoiceList
-            list={[
-              { label: "Link 1", value: false },
-              { label: "Link 2", value: false },
-              { label: "Link 3", value: false },
-            ]}
-            onPress={handleChoice}
-          />
+          <ChoiceList list={checkBoxList} onPress={handleChoice} />
           <Button loading={isLoading} onPress={handleSubmit}>
             <Typo fontWeight={"700"} color={colors.white} size={15}>
               Submit
@@ -128,6 +144,7 @@ const styles = StyleSheet.create({
   checkBoxContainer: {
     backgroundColor: "#ffffff",
     padding: 10,
+    marginBottom: 150,
   },
   endIcon: {
     padding: 21,

@@ -478,13 +478,13 @@ async def risk_search():
     """Endpoint to search for a person and return webpage metadata for disambiguation"""
     query = request.args.get('searchName', '')
     if not query:
-        return jsonify({"error": "No search query provided"}), 500
+        return jsonify({"error": "No search query provided"}), 400
 
     try:
         webpages_metadata = await get_search_results_metadata(query)
         return jsonify({"webpages": webpages_metadata})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 400
 
 @risksearch.route('/extract', methods=["POST"])
 async def extract_pii():
@@ -496,7 +496,7 @@ async def extract_pii():
 
     data = request.json
     if not data:
-        return jsonify({"error": "No data provided"}), 500
+        return jsonify({"error": "No data provided"}), 400
 
     target_name = data.get('searchName', '')
     selected_urls = data.get('selectedUrls', [])
@@ -504,9 +504,9 @@ async def extract_pii():
     print(f"Selected URLs: {selected_urls}")
 
     if not target_name:
-        return jsonify({"error": "No search name provided"}), 500
+        return jsonify({"error": "No search name provided"}), 400
     if not selected_urls:
-        return jsonify({"error": "No URLs selected"}), 500
+        return jsonify({"error": "No URLs selected"}), 400
 
     try:
         print("About to scrape selected URLs")
@@ -676,4 +676,4 @@ async def extract_pii():
         return jsonify(dictionary)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 400
