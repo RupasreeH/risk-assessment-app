@@ -9,7 +9,7 @@ const ChoiceList = ({ list, onPress }: ChoiceListProps) => {
   const [checkBoxList, setCheckBoxList] = useState(list);
   const handlePress = (item: Choice) => {
     const updatedList = checkBoxList.map((el) =>
-      el.title === item.title ? { ...el, value: !el.value } : el
+      el.url === item.url ? { ...el, value: !el.value } : el
     );
     setCheckBoxList(updatedList);
     onPress(item);
