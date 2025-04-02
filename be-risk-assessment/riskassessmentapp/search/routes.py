@@ -332,64 +332,51 @@ def calculate_overall_risk_score(pii_attributes, weights, willingness_measures, 
     return overall_risk_score
 
 
-async def check_webpage_relevance(html_content, target_name):
+async def extract_page_metadata(html_content, url):
     """
-    Checks if the webpage content is relevant to the target person by using GPT.
+    Extract metadata from a webpage including title, description, and keywords.
 
     Args:
-        html_content (str): The raw HTML content of the webpage
-        target_name (str): The name of the person being searched for
+        html_content (str): The HTML content of the webpage
+        url (str): The URL of the webpage
 
     Returns:
-        bool: True if the webpage is relevant to the target person, False otherwise
+        dict: A dictionary containing the webpage metadata
     """
-    # Clean HTML to extract text
     soup = BeautifulSoup(html_content, 'html.parser')
 
-    # Get text and clean it
-    parsed_text = soup.get_text()
-    text = parsed_text.split('\n')
-    text = list(filter(lambda x: x not in ('', '\r'), text))
+    # Extract title
+    title = soup.title.string if soup.title else "No title available"
 
-    # Join the first portion of the text (to keep API calls smaller)
-    # Using only the first 10000 characters to avoid large API calls
-    sample_text = ' '.join(text)[:10000]
-    print("this is sample text", sample_text)
+    # Extract meta description
+    description_tag = soup.find("meta", {"name": "description"})
+    description = description_tag.get("content", "") if description_tag else ""
 
-    system_prompt = (
-        f"You are an AI assistant that determines if a webpage contains information about a specific person. If you find the '{target_name}' at least once, it is considered relevant."
-        f"The person we're looking for is named '{target_name}'. "
-        f"Analyze the text and determine if this webpage contains information about this specific person. "
-        f"The full name '{target_name}' should appear at least once, and there is no need of context should indicate "
-    )
+    # Extract meta keywords
+    keywords_tag = soup.find("meta", {"name": "keywords"})
+    keywords = keywords_tag.get("content", "") if keywords_tag else ""
 
-    user_prompt = (
-        f"Is the following webpage content about {target_name}? Answer with just 'yes' if the webpage "
-        f"is clearly about this specific person, or 'no' if it's not or you're unsure.\n\n"
-        f"Webpage content:\n{sample_text}"
-    )
+    # Extract a snippet of text (first paragraph or visible text)
+    snippet = ""
+    for p in soup.find_all('p'):
+        if p.text and len(p.text.strip()) > 50:  # Find a paragraph with reasonable content
+            snippet = p.text.strip()[:200] + "..." if len(p.text.strip()) > 200 else p.text.strip()
+            break
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Using the faster model for this filtering task
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.1,  # Low temperature for more deterministic output
-            max_tokens=10  # We only need a yes/no answer
-        )
+    if not snippet:
+        # If no good paragraph found, just get some visible text
+        visible_text = soup.get_text().strip()
+        snippet = visible_text[:200] + "..." if len(visible_text) > 200 else visible_text
 
-        answer = response.choices[0].message.content.strip().lower()
-        is_relevant = answer == 'yes'
+    # Create webpage info object
+    webpage_info = {
+        "url": url,
+        "title": title,
+        "description": description if description else snippet,
+        "keywords": keywords
+    }
 
-        print(f"Relevance check for {target_name}: {is_relevant}")
-        return is_relevant
-
-    except Exception as e:
-        print(f"Error in relevance checking: {e}")
-        # In case of error, we'll include the content to avoid missing potentially relevant data
-        return True
+    return webpage_info
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(aiohttp.ClientError))
 async def fetch_url(session, url):
@@ -400,8 +387,16 @@ async def fetch_url(session, url):
         response.raise_for_status()
         return await response.text()
 
-async def scrape_google_results(query):
-    tasks = []
+async def get_search_results_metadata(query):
+    """
+    Search for query on Google and return metadata for each result.
+
+    Args:
+        query (str): The search query (person's name)
+
+    Returns:
+        list: A list of dictionaries containing metadata for each search result
+    """
     #urls = [url for url in search(query, tld="com", num=21, stop=21, pause=2)]
     urls = []
     for url in search(query, num_results=21, safe=None):
@@ -409,73 +404,121 @@ async def scrape_google_results(query):
         print("Inside search delay")
         print(urls)
         time.sleep(random.uniform(0, 1)) 
+    print(f"Found {len(urls)} URLs for query: {query}")
 
-    print("URLs being scraped:")
-    for idx, url in enumerate(urls, 1):
-        print(f"{idx}. {url}")
-
-    print(f"\nTotal URLs to be scraped: {len(urls)}")
-
-    relevant_responses = []
-    relevant_urls = []
-    no_relevant_data = True
+    webpages_metadata = []
 
     async with ClientSession() as session:
         for url in urls:
-            if not (url.endswith('.pdf') or '-image?' in url):
-                tasks.append(fetch_url(session, url))
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Check relevance for each response
-        for idx, response in enumerate(responses):
-            if isinstance(response, Exception):
-                print(f"Error fetching URL {urls[idx]}: {response}")
+            if url.endswith('.pdf') or '-image?' in url:
                 continue
 
-            # Check if the webpage is relevant to the target person
             try:
-                is_relevant = await check_webpage_relevance(response, query)
-
-                if is_relevant:
-                    print(f"✅ URL is relevant: {urls[idx]}")
-                    relevant_responses.append(response)
-                    relevant_urls.append(urls[idx])
-                    no_relevant_data = False
-                else:
-                    print(f"❌ URL is not relevant: {urls[idx]}")
+                html_content = await fetch_url(session, url)
+                metadata = await extract_page_metadata(html_content, url)
+                webpages_metadata.append(metadata)
+                print(f"Extracted metadata from: {url}")
             except Exception as e:
-                print(f"Error checking relevance for {urls[idx]}: {e}")
-                # On error, include the response to avoid missing potentially relevant data
+                print(f"Error fetching or processing URL {url}: {e}")
+                # Add a basic entry even if we couldn't fetch the full metadata
+                webpages_metadata.append({
+                    "url": url,
+                    "title": "",
+                    "description": "",
+                    "keywords": ""
+                })
+
+    return webpages_metadata
+
+
+async def scrape_selected_urls(urls):
+    """
+    Scrape content from user-selected URLs.
+
+    Args:
+        urls (list): List of URLs to scrape
+
+    Returns:
+        tuple: (list of raw responses, list of URLs, boolean indicating if no data was found)
+    """
+
+    if not urls:
+        return [], [], True
+    relevant_responses = []
+    relevant_urls = []
+
+    async with ClientSession() as session:
+        for url in urls:
+            if url.endswith('.pdf') or '-image?' in url:
+                continue
+
+            try:
+                response = await fetch_url(session, url)
+
+                # Check if the response is an exception
+                if isinstance(response, Exception):
+                    print(f"Error fetching URL {url}: {response}")
+                    continue
+
                 relevant_responses.append(response)
-                relevant_urls.append(urls[idx])
-                no_relevant_data = False
+                relevant_urls.append(url)
 
-    if no_relevant_data:
-        print("No relevant webpages found for the target person.")
+            except Exception as e:
+                print(f"Error fetching or processing URL {url}: {e}")
 
-    return relevant_responses, relevant_urls, no_relevant_data
+        if not relevant_responses:
+            return [], [], True
 
+
+
+    return relevant_responses, relevant_urls, False
 
 @risksearch.route('/', methods=["GET"])
 async def risk_search():
-    execution_start = time.time()
+    """Endpoint to search for a person and return webpage metadata for disambiguation"""
     query = request.args.get('searchName', '')
-    print("this is query name", query)
-    target_name = query
     if not query:
-        return jsonify({"error": "No search query provided"}), 400
-    # Check if person exists using Google Knowledge Graph API
-    '''exists = await check_person_existence(query)
-    if not exists:
-         return jsonify({"message": "No Data Found."})'''
-
-    data_into_list = []
+        return jsonify({"error": "No search query provided"}), 500
 
     try:
-        responses, urls, no_relevant_data = await scrape_google_results(query)
+        webpages_metadata = await get_search_results_metadata(query)
+        return jsonify({"webpages": webpages_metadata})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@risksearch.route('/extract', methods=["POST"])
+async def extract_pii():
+    """Endpoint to extract PII from selected URLs"""
+    execution_start = time.time()
+    print("Request Content-Type:", request.headers.get('Content-Type'))
+    print("Request method:", request.method)
+    print("Request JSON:", request.json)
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 500
+
+    target_name = data.get('searchName', '')
+    selected_urls = data.get('selectedUrls', [])
+    print(f"Target name: {target_name}")
+    print(f"Selected URLs: {selected_urls}")
+
+    if not target_name:
+        return jsonify({"error": "No search name provided"}), 500
+    if not selected_urls:
+        return jsonify({"error": "No URLs selected"}), 500
+
+    try:
+        print("About to scrape selected URLs")
+        responses, urls, no_relevant_data = await scrape_selected_urls(selected_urls)
+
+        print(f"Responses type: {type(responses)}, length: {len(responses)}")
+        print(f"First response sample (truncated): {str(responses[0])[:100] if responses else 'No response'}")
+        print(f"URLs returned: {urls}")
+        print(f"No relevant data flag: {no_relevant_data}")
         if no_relevant_data:
             return jsonify({"message": "No Data Found."})
+        data_into_list = []
 
         for idx, response in enumerate(responses):
             if isinstance(response, Exception):
@@ -483,13 +526,12 @@ async def risk_search():
                 continue
             soup = BeautifulSoup(response, 'html.parser')
 
-            cleaned_data = clean_scraped_data(soup, query)
+            #cleaned_data = clean_scraped_data(soup, query)
 
 
             parsed_text = soup.get_text()
             text = parsed_text.split('\n')
             text = list(filter(lambda x: x not in ('', '\r'), text))
-
 
             for line in text:
                 if not line.isspace():
@@ -506,6 +548,9 @@ async def risk_search():
         for line in data_into_list:
             print(line)
 
+        if not data_into_list:
+            return jsonify({"message": "No Data Found."})
+
         output_match_term = []
         output_word = []
         output_line = []
@@ -516,7 +561,7 @@ async def risk_search():
         output_list_line_no = []
         output_list_match_count = []
 
-        name_split = query.lower().split()
+        name_split = target_name.lower().split()
         phone_pattern = [
             r'[\d]?[(]{1}[\d]{3}[)]{1}[\s]?[\d]{3}[-\s]{1}[\d]{4}',
             r'[+]{1}[\d]{2}[\s]{1}[(]?[\+]?[)]?[\d]{2}[\s]{1}[\d]{4}[\s]{1}[\d]{4}',

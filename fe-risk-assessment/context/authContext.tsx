@@ -87,6 +87,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const extract = async (searchName: string, selectedUrls: string[]) => {
+    try {
+      const response = await fetch(`${url}/risksearch/extract`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          searchName: searchName,
+          selectedUrls: selectedUrls,
+        }),
+      });
+      const content = await response.json();
+      return { success: true, msg: content, status_code: response.status };
+    } catch (error: any) {
+      let msg = error.message;
+      return { success: false, msg };
+    }
+  };
+
   const userDetails = async (email: string) => {
     try {
       const rawResponse = await fetch(`${url}/users/details?email=${email}`, {
@@ -163,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     userDetails,
     updateUser,
     forgotPassword,
+    extract,
   };
 
   return (

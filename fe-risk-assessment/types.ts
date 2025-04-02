@@ -165,6 +165,10 @@ export type AuthContextType = {
   forgotPassword: (
     email: string
   ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
+  extract: (
+    searchName: string,
+    selectedUrls: string[]
+  ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
 };
 
 export type ResponseType = {
@@ -207,3 +211,13 @@ export type SearchResult = {
   risk_level: string;
   risk_score: number;
 };
+
+export interface Choice {
+  label: string;
+  value: boolean;
+}
+
+export interface ChoiceListProps {
+  list: Choice[];
+  onPress: (item: Choice) => void;
+}

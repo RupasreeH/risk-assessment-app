@@ -12,14 +12,27 @@ import Loading from "@/components/Loading";
 import { useRouter } from "expo-router";
 import Button from "@/components/Button";
 import Typo from "@/components/Typo";
+import { Choice } from "@/types";
+import ChoiceList from "@/components/ChoiceList";
 
 const Home = () => {
   const [isLoading, setIsloading] = useState(false);
   const { search, results, setResults } = useAuth();
   const searchRef = useRef("");
   const router = useRouter();
+  const [showCheckBox, setShowCheckBox] = useState(false);
 
   const handleSearch = async () => {
+    setResults(null);
+    setShowCheckBox(true);
+  };
+
+  const handleChoice = (item: Choice) => {
+    console.log(item);
+  };
+
+  const handleSubmit = async () => {
+    setShowCheckBox(false);
     setResults(null);
     setIsloading(true);
     const res = await search(searchRef.current);
@@ -56,6 +69,23 @@ const Home = () => {
           }
         />
       </View>
+      {showCheckBox && (
+        <View style={styles.checkBoxContainer}>
+          <ChoiceList
+            list={[
+              { label: "Link 1", value: false },
+              { label: "Link 2", value: false },
+              { label: "Link 3", value: false },
+            ]}
+            onPress={handleChoice}
+          />
+          <Button loading={isLoading} onPress={handleSubmit}>
+            <Typo fontWeight={"700"} color={colors.white} size={15}>
+              Submit
+            </Typo>
+          </Button>
+        </View>
+      )}
       {isLoading && <Loading showSuggestions={true} />}
       {results?.risk_score > 0 && (
         <View style={styles.container}>
@@ -76,7 +106,9 @@ const Home = () => {
         </View>
       )}
       {results?.risk_score === 0 && (
-        <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <Typo fontWeight={"500"} color={colors.neutral500} size={25}>
             No Data Found
           </Typo>
@@ -91,6 +123,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
+    padding: 10,
+  },
+  checkBoxContainer: {
+    backgroundColor: "#ffffff",
     padding: 10,
   },
   endIcon: {
