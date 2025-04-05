@@ -161,8 +161,11 @@ const GaugeMeter: React.FC<GaugeMeterProps> = ({
         <Circle cx={size / 2} cy={size / 2} r={size * 0.04} fill="#333" />
       </Svg>
 
-      <Text style={[styles.percentageText, { fontSize: size * 0.1 }]}>
-        {score}
+      <Text style={[styles.scoreText, { fontSize: 22 }]}>
+        Your risk level is <Text>{score}</Text>
+      </Text>
+      <Text style={[styles.percentageText, { fontSize: 22 }]}>
+        Your risk score is <Text>{percentage.toFixed(3)}</Text>
       </Text>
     </View>
   );
@@ -176,11 +179,17 @@ const styles = StyleSheet.create({
     position: "relative",
     marginBottom: 10,
   },
-  percentageText: {
+  scoreText: {
     color: "#333",
     fontWeight: "bold",
     position: "absolute",
     top: 200,
+  },
+  percentageText: {
+    color: "#333",
+    fontWeight: "bold",
+    position: "absolute",
+    top: 250,
   },
 });
 
