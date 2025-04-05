@@ -1,6 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import React, { useEffect } from "react";
-import Button from "@/components/Button";
+import React from "react";
 import Typo from "@/components/Typo";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import { useAuth } from "@/context/authContext";
@@ -22,6 +21,12 @@ const Profile = () => {
       icon: <Icons.User size={26} color={colors.white} weight="fill" />,
       routeName: "/(modals)/profileModal",
       bgColor: "#6366f1",
+    },
+    {
+      title: "Add User List",
+      icon: <Icons.Users size={26} color={colors.white} weight="fill" />,
+      routeName: "/(modals)/addUserModal",
+      bgColor: colors.green,
     },
     {
       title: "Privacy Policy",

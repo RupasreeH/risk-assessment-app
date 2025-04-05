@@ -3,45 +3,55 @@ import React, { useRef, useState } from "react";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import GaugeMeter from "@/components/Gauge";
 import { View, StyleSheet, Pressable } from "react-native";
-import Input from "@/components/Input";
-import * as Icons from "phosphor-react-native";
-import { verticalScale } from "@/utils/styling";
 import { colors, radius } from "@/constants/theme";
 import { useAuth } from "@/context/authContext";
 import Loading from "@/components/Loading";
 import { useRouter } from "expo-router";
 import Button from "@/components/Button";
 import Typo from "@/components/Typo";
-import { Choice } from "@/types";
+import { Choice, Option } from "@/types";
 import ChoiceList from "@/components/ChoiceList";
+import Dropdown from "@/components/Dropdown";
 
 const Home = () => {
   const [isLoading, setIsloading] = useState(false);
-  const { search, results, setResults, extract } = useAuth();
-  const searchRef = useRef("");
+  const { search, results, setResults, extract, getSearchNames } = useAuth();
   const router = useRouter();
   const [showCheckBox, setShowCheckBox] = useState(false);
   const [checkBoxList, setCheckBoxList] = useState([]);
   const [selectUrlList, setSelectUrlList] = useState<string[]>([]);
   const [disableInput, setDisableInput] = useState(false);
+  const [dropdownValue, setDropdownValue] = useState<string>("");
+
+  const data: Option[] = getSearchNames().map((name) => ({
+    label: name,
+    value: name,
+  }));
 
   const prepareCheckBoxList = (results: any) => {
     if (!results || !results.webpages || results.webpages.length <= 0) {
       return [];
     }
-    return results.webpages.map((result: any) => ({
-      ...result,
-      value: false,
-    }));
+    return results.webpages
+      .filter((result: any) => result.name)
+      .map((result: any) => ({
+        ...result,
+        value: false,
+      }));
   };
 
   const handleSearch = async () => {
     setResults(null);
     setIsloading(true);
     setDisableInput(true);
-    const res = await search(searchRef.current);
-    setCheckBoxList(prepareCheckBoxList(res.msg));
+    const res = await search(dropdownValue);
+    const checkList = prepareCheckBoxList(res.msg);
+    setCheckBoxList(checkList);
     setShowCheckBox(true);
+    if (checkList.length <= 0) {
+      setDisableInput(false);
+    }
+
     setIsloading(false);
   };
 
@@ -57,42 +67,40 @@ const Home = () => {
     setShowCheckBox(false);
     setResults(null);
     setIsloading(true);
-    const res = await extract(searchRef.current, selectUrlList);
+    const res = await extract(dropdownValue, selectUrlList);
     setResults(res.msg);
     setIsloading(false);
     setDisableInput(false);
   };
 
+  const onDropdownChange = (item: Option) => {
+    setDropdownValue(item.value);
+  };
+
   return (
     <ScreenWrapper>
       <View style={styles.container}>
-        <Input
-          placeholder="Enter name"
-          onChangeText={(value) => (searchRef.current = value)}
-          editable={!disableInput}
-          endicon={
-            <View
-              style={[
-                styles.endIcon,
-                {
-                  backgroundColor: disableInput
-                    ? colors.neutral400
-                    : colors.primary,
-                },
-              ]}
-            >
-              <Pressable onPress={handleSearch}>
-                <Icons.MagnifyingGlass
-                  size={verticalScale(26)}
-                  color={colors.white}
-                  weight="fill"
-                />
-              </Pressable>
-            </View>
-          }
+        <Dropdown
+          data={data}
+          disable={disableInput}
+          value={dropdownValue}
+          placeholder="Select User Full Name"
+          searchPlaceholder="Search User"
+          onChange={onDropdownChange}
         />
+        <View style={{ flexDirection: "row", marginTop: 1 }}>
+          <Button
+            onPress={handleSearch}
+            disabled={disableInput || !dropdownValue}
+            style={{ flex: 1 }}
+          >
+            <Typo color={colors.white} fontWeight={"700"}>
+              Search
+            </Typo>
+          </Button>
+        </View>
       </View>
-      {showCheckBox && (
+      {showCheckBox && checkBoxList.length > 0 && (
         <View style={styles.checkBoxContainer}>
           <ChoiceList list={checkBoxList} onPress={handleChoice} />
           <Button loading={isLoading} onPress={handleSubmit}>
@@ -144,7 +152,7 @@ const styles = StyleSheet.create({
   checkBoxContainer: {
     backgroundColor: "#ffffff",
     padding: 10,
-    marginBottom: 150,
+    marginBottom: 200,
   },
   endIcon: {
     padding: 21,

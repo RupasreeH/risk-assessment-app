@@ -1,41 +1,33 @@
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import React, { useState } from "react";
-import ModalWrapper from "@/components/ModalWrapper";
+import React, { useEffect, useState } from "react";
 import { colors, spacingX, spacingY } from "@/constants/theme";
+import { scale, verticalScale } from "@/utils/styling";
+import ModalWrapper from "@/components/ModalWrapper";
+import Typo from "@/components/Typo";
+import Button from "@/components/Button";
 import Header from "@/components/Header";
 import BackButton from "@/components/BackButton";
-import { Image } from "expo-image";
-import { scale, verticalScale } from "@/utils/styling";
-import Typo from "@/components/Typo";
 import Input from "@/components/Input";
 import { useAuth } from "@/context/authContext";
-import Button from "@/components/Button";
 import { UserType } from "@/types";
 
-const ProfileModal = () => {
-  const { setUser, user, updateUser } = useAuth();
+const AddUserModal = () => {
+  const { updateSearchUsers, getSearchNames, setUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [userData, setUserData] = useState<any>(user);
+  const [users, setUsers] = useState<string[]>([]);
+  const [disableUsers, setDisableUsers] = useState<string[]>([]);
+  useEffect(() => {
+    if (users.length <= 0) {
+      const userList = getSearchNames();
+      setUsers(userList);
+      setDisableUsers(userList);
+    }
+  });
   const onSubmit = async () => {
-    if (!userData.email || !userData.firstName || !userData.lastName) {
-      Alert.alert("User Update", "Please fill all the fields");
-      return;
-    }
-
-    if (userData.oldPassword && !userData.newPassword) {
-      Alert.alert("User Update", "Please enter new password");
-      return;
-    }
     setLoading(true);
-    const res = await updateUser(
-      userData.firstName,
-      userData.lastName,
-      userData.email,
-      userData.oldPassword,
-      userData.newPassword
-    );
+    const userList = users.slice(1);
+    const res = await updateSearchUsers(userList ? userList?.join(",") : "");
     setLoading(false);
-
     if (!res.success) {
       Alert.alert("User Update", res.msg);
       return;
@@ -63,61 +55,58 @@ const ProfileModal = () => {
     Alert.alert("User Update", "User updated successfully");
     return;
   };
+
+  const onChangeText = (value: string, index: number) => {
+    const updatedUsers = [...users];
+    updatedUsers[index] = value;
+    setUsers(updatedUsers);
+  };
+
   return (
     <ModalWrapper>
       <View style={styles.container}>
         <Header
-          title="Update Profile"
+          title="Add Search Users"
           leftIcon={<BackButton />}
           style={{ marginBottom: spacingY._10 }}
         />
         <ScrollView contentContainerStyle={styles.form}>
-          <View style={styles.avatarContainer}>
-            <Image
-              source={require("../../assets/images/defaultAvatar.png")}
-              style={styles.avatar}
-              contentFit="cover"
-              transition={100}
-            />
+          <View>
+            <View>
+              <Typo fontWeight={"500"} color={colors.critical}>
+                Please enter full name properly for each user. Once added, you
+                will not be able to edit the name.
+              </Typo>
+            </View>
           </View>
           <View style={styles.inputContainer}>
-            <Typo color={colors.black}>First Name</Typo>
+            <Typo color={colors.black}>User 1</Typo>
             <Input
-              placeholder="First Name"
-              value={userData?.firstName}
-              editable={false}
-              selectTextOnFocus={false}
-              onChangeText={(value) => {
-                setUserData({ ...userData, firstName: value });
-              }}
+              placeholder="Enter User 1 Full Name"
+              editable={disableUsers[1] ? false : true}
+              value={users[1] ? users[1] : ""}
+              onChangeText={(value) => onChangeText(value, 1)}
             />
-            <Typo color={colors.black}>Last Name</Typo>
+            <Typo color={colors.black}>User 2</Typo>
             <Input
-              placeholder="Last Name"
-              value={userData?.lastName}
-              editable={false}
-              selectTextOnFocus={false}
-              onChangeText={(value) => {
-                setUserData({ ...userData, lastName: value });
-              }}
+              placeholder="Enter User 2 Full Name"
+              editable={disableUsers[2] ? false : true}
+              value={users[2] ? users[2] : ""}
+              onChangeText={(value) => onChangeText(value, 2)}
             />
-            <Typo color={colors.black}>Old Password</Typo>
+            <Typo color={colors.black}>User 3</Typo>
             <Input
-              placeholder="Old Password"
-              value={userData?.oldPassword}
-              secureTextEntry
-              onChangeText={(value) => {
-                setUserData({ ...userData, oldPassword: value });
-              }}
+              placeholder="Enter User 3 Full Name"
+              editable={disableUsers[3] ? false : true}
+              value={users[3] ? users[3] : ""}
+              onChangeText={(value) => onChangeText(value, 3)}
             />
-            <Typo color={colors.black}>New Password</Typo>
+            <Typo color={colors.black}>User 4</Typo>
             <Input
-              placeholder="New Password"
-              secureTextEntry
-              value={userData?.newPassword}
-              onChangeText={(value) => {
-                setUserData({ ...userData, newPassword: value });
-              }}
+              placeholder="Enter User 4 Full Name"
+              editable={disableUsers[4] ? false : true}
+              value={users[4] ? users[4] : ""}
+              onChangeText={(value) => onChangeText(value, 4)}
             />
           </View>
         </ScrollView>
@@ -133,7 +122,7 @@ const ProfileModal = () => {
   );
 };
 
-export default ProfileModal;
+export default AddUserModal;
 
 const styles = StyleSheet.create({
   container: {

@@ -7,7 +7,7 @@ export const colors = {
   text: "#000",
   textLight: "#171717",
   textLighter: "#d4d4d4",
-  loddingText: "#696969",
+  loadingText: "#696969",
   white: "#fff",
   black: "#000",
   rose: "#ef4444",

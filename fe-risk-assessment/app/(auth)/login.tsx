@@ -59,6 +59,7 @@ const Login = () => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      searchNames: user.searchNames,
     });
   };
 

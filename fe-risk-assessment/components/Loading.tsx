@@ -90,8 +90,16 @@ const Loading = ({
             .damping(12)}
         >
           <Typo
-            size={14}
-            color={colors.loddingText}
+            size={12}
+            fontWeight={"700"}
+            color={colors.primary}
+            style={{ textAlign: "center", color: colors.primary }}
+          >
+            Security Tips
+          </Typo>
+          <Typo
+            size={12}
+            color={colors.loadingText}
             style={{ textAlign: "center" }}
           >
             {suggestion}

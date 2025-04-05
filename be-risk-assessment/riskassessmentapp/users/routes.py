@@ -123,6 +123,7 @@ def updateUserDetails():
     first_name = request.json['firstName']
     last_name = request.json['lastName']
     email = request.json['email']
+    search_names = request.json['searchNames']
 
     old_password = request.json.get('oldPassword')  # Optional
     new_password = request.json.get('newPassword')  # Optional
@@ -149,6 +150,7 @@ def updateUserDetails():
     # Always update these fields
     user.first_name = first_name
     user.last_name = last_name
+    user.search_names = search_names
 
     db.session.commit()
 

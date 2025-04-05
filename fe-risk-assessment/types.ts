@@ -127,6 +127,7 @@ export type UserType = {
   email?: string | null;
   firstName: string | null;
   lastName: string | null;
+  searchNames?: string | null;
 } | null;
 
 export type UserDataType = {
@@ -139,6 +140,7 @@ export type AuthContextType = {
   setUser: Function;
   results: SearchResult;
   setResults: Function;
+  getSearchNames: () => string[];
   login: (
     email: string,
     password: string
@@ -168,6 +170,9 @@ export type AuthContextType = {
   extract: (
     searchName: string,
     selectedUrls: string[]
+  ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
+  updateSearchUsers: (
+    searchNames: string
   ) => Promise<{ success: boolean; msg?: any; status_code?: number }>;
 };
 
@@ -223,4 +228,9 @@ export interface Choice {
 export interface ChoiceListProps {
   list: Choice[];
   onPress: (item: Choice) => void;
+}
+
+export interface Option {
+  label: string;
+  value: string;
 }

@@ -40,6 +40,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const getSearchNames = () => {
+    const users = user && user.searchNames ? user.searchNames?.split(",") : [];
+    return [user?.firstName + " " + user?.lastName, ...users];
+  };
+
   const register = async (
     firstName: string,
     lastName: string,
@@ -153,6 +158,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updateSearchUsers = async (searchNames: string) => {
+    try {
+      if (!user) {
+        return { success: false, msg: "User not found" };
+      }
+      const response = await fetch(`${url}/users/update-user`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          searchNames: searchNames,
+        }),
+      });
+      const content = await response.json();
+      return { success: true, msg: content, status_code: response.status };
+    } catch (error: any) {
+      let msg = error.message;
+      return { success: false, msg };
+    }
+  };
+
   const forgotPassword = async (email: string) => {
     try {
       const response = await fetch(`${url}/users/forgot-password`, {
@@ -184,6 +214,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     updateUser,
     forgotPassword,
     extract,
+    getSearchNames,
+    updateSearchUsers,
   };
 
   return (

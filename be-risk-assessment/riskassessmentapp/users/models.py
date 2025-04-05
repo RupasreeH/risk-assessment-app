@@ -10,6 +10,7 @@ class User(db.Model, UserMixin):
     last_name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    search_names = db.Column(db.String(10000), nullable=True)
 
     def __repr__(self):
         return f'<User: {self.email}>'
@@ -22,5 +23,6 @@ class User(db.Model, UserMixin):
             "uid": self.uid,
             "email":self.email,
             "firstName":self.first_name,
-            "lastName":self.last_name
+            "lastName":self.last_name,
+            "searchNames":self.search_names
         }

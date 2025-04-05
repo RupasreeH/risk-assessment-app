@@ -13,6 +13,12 @@ const StackLayout = () => {
         }}
       />
       <Stack.Screen
+        name="(modals)/addUserModal"
+        options={{
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
         name="(details)/policy"
         options={{
           presentation: "modal",
