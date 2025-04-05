@@ -476,6 +476,7 @@ async def scrape_selected_urls(urls):
 @risksearch.route('/', methods=["GET"])
 async def risk_search():
     """Endpoint to search for a person and return webpage metadata for disambiguation"""
+    print("This is risk_search()")
     query = request.args.get('searchName', '')
     if not query:
         return jsonify({"error": "No search query provided"}), 400
