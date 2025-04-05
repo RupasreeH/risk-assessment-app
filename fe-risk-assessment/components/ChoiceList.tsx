@@ -53,25 +53,19 @@ const ChoiceList = ({ list, onPress }: ChoiceListProps) => {
   };
   return (
     <ScrollView>
-      {checkBoxList?.length <= 0 && (
-        <Typo fontWeight={"700"} color={colors.black} size={15}>
-          No Data Found.
-        </Typo>
-      )}
-      {checkBoxList?.length > 0 &&
-        checkBoxList.map((item, index) => (
-          <CheckBox
-            key={index}
-            checked={item.value}
-            title={getLabel(item)}
-            onPress={() => handlePress(item)}
-            containerStyle={{
-              alignItems: "flex-start",
-              backgroundColor: "transparent",
-              borderWidth: 0,
-            }}
-          />
-        ))}
+      {checkBoxList.map((item, index) => (
+        <CheckBox
+          key={index}
+          checked={item.value}
+          title={getLabel(item)}
+          onPress={() => handlePress(item)}
+          containerStyle={{
+            alignItems: "flex-start",
+            backgroundColor: "transparent",
+            borderWidth: 0,
+          }}
+        />
+      ))}
     </ScrollView>
   );
 };

@@ -33,7 +33,7 @@ const Home = () => {
       return [];
     }
     return results.webpages
-      .filter((result: any) => result.name)
+      .filter((result: any) => result.title)
       .map((result: any) => ({
         ...result,
         value: false,
@@ -129,15 +129,16 @@ const Home = () => {
           </Button>
         </View>
       )}
-      {results?.risk_score === 0 && (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <Typo fontWeight={"500"} color={colors.neutral500} size={25}>
-            No Data Found
-          </Typo>
-        </View>
-      )}
+      {results?.risk_score === 0 ||
+        (showCheckBox && checkBoxList.length <= 0 && (
+          <View
+            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+          >
+            <Typo fontWeight={"500"} color={colors.neutral500} size={25}>
+              No Data Found
+            </Typo>
+          </View>
+        ))}
     </ScreenWrapper>
   );
 };
