@@ -2,7 +2,7 @@
 
 - Python3
 - Docker Desktop
-- VSCode
+- VSCode or any code editor
 
 # How to run the project
 
