@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   checkBoxContainer: {
     backgroundColor: "#ffffff",
     padding: 10,
-    marginBottom: 200,
+    marginBottom: 170,
   },
   endIcon: {
     padding: 21,
