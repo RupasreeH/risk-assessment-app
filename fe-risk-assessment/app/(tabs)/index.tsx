@@ -44,6 +44,7 @@ const Home = () => {
     setResults(null);
     setIsloading(true);
     setDisableInput(true);
+    setSelectUrlList([]);
     const res = await search(dropdownValue);
     const checkList = prepareCheckBoxList(res.msg);
     setCheckBoxList(checkList);
