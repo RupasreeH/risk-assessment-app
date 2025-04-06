@@ -162,10 +162,17 @@ const GaugeMeter: React.FC<GaugeMeterProps> = ({
       </Svg>
 
       <Text style={[styles.scoreText, { fontSize: 22 }]}>
-        Your risk level is <Text>{score}</Text>
+        Your risk level is{" "}
+        <Text
+          style={{
+            color: colors[score.toLowerCase() as keyof typeof colors],
+          }}
+        >
+          {score}
+        </Text>
       </Text>
       <Text style={[styles.percentageText, { fontSize: 22 }]}>
-        Your risk score is <Text>{percentage.toFixed(3)}</Text>
+        Your risk score is <Text>{percentage.toFixed(2)}</Text>
       </Text>
     </View>
   );

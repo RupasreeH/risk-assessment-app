@@ -51,7 +51,6 @@ const Home = () => {
     if (checkList.length <= 0) {
       setDisableInput(false);
     }
-
     setIsloading(false);
   };
 
@@ -94,7 +93,7 @@ const Home = () => {
             disabled={disableInput || !dropdownValue}
             style={{ flex: 1 }}
           >
-            <Typo color={colors.white} fontWeight={"700"}>
+            <Typo color={colors.white} fontWeight={"500"} size={15}>
               Search
             </Typo>
           </Button>
@@ -103,8 +102,12 @@ const Home = () => {
       {showCheckBox && checkBoxList.length > 0 && (
         <View style={styles.checkBoxContainer}>
           <ChoiceList list={checkBoxList} onPress={handleChoice} />
-          <Button loading={isLoading} onPress={handleSubmit}>
-            <Typo fontWeight={"700"} color={colors.white} size={15}>
+          <Button
+            loading={isLoading}
+            onPress={handleSubmit}
+            disabled={!selectUrlList.length}
+          >
+            <Typo fontWeight={"500"} color={colors.white} size={15}>
               Submit
             </Typo>
           </Button>
@@ -123,7 +126,7 @@ const Home = () => {
       {results?.risk_score > 0 && (
         <View style={{ padding: 10 }}>
           <Button loading={isLoading} onPress={() => router.push("/details")}>
-            <Typo fontWeight={"700"} color={colors.white} size={21}>
+            <Typo fontWeight={"500"} color={colors.white} size={15}>
               More Details
             </Typo>
           </Button>
@@ -139,6 +142,26 @@ const Home = () => {
             </Typo>
           </View>
         ))}
+      {!results && !checkBoxList?.length && !isLoading && (
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 10,
+          }}
+        >
+          <Typo
+            fontWeight={"500"}
+            color={colors.neutral500}
+            size={12}
+            style={{ textAlign: "center" }}
+          >
+            Please select a user from dropdown and click on search to start the
+            risk assessment.
+          </Typo>
+        </View>
+      )}
     </ScreenWrapper>
   );
 };

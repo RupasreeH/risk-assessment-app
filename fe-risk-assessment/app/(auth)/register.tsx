@@ -78,12 +78,16 @@ const Register = () => {
           <Typo size={30} fontWeight={"800"}>
             Get Started
           </Typo>
+          <Typo size={12} fontWeight={"600"} style={{ color: "red" }}>
+            Please enter your first and last name correctly. Once you sign up,
+            you will not be able to change it later.
+          </Typo>
         </View>
 
         {/* Register form */}
         <View style={styles.form}>
           <Typo size={16} color={colors.textLight}>
-            Create an account to track your risk score
+            Create an account to check your risk score
           </Typo>
           <Input
             placeholder="Enter your first name"

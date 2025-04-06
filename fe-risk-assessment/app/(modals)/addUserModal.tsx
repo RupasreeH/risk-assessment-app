@@ -73,9 +73,9 @@ const AddUserModal = () => {
         <ScrollView contentContainerStyle={styles.form}>
           <View>
             <View>
-              <Typo fontWeight={"500"} color={colors.critical}>
-                Please enter full name properly for each user. Once added, you
-                will not be able to edit the name.
+              <Typo size={12} fontWeight={"600"} color="red">
+                Please enter each user's full name correctly. Once a name is
+                added, it cannot be changed.
               </Typo>
             </View>
           </View>
@@ -113,7 +113,7 @@ const AddUserModal = () => {
       </View>
       <View style={styles.footer}>
         <Button onPress={onSubmit} loading={loading} style={{ flex: 1 }}>
-          <Typo color={colors.white} fontWeight={"700"}>
+          <Typo color={colors.white} fontWeight={"500"} size={15}>
             Update
           </Typo>
         </Button>

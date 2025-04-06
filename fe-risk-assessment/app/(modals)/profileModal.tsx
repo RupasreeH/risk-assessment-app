@@ -124,7 +124,7 @@ const ProfileModal = () => {
       </View>
       <View style={styles.footer}>
         <Button onPress={onSubmit} loading={loading} style={{ flex: 1 }}>
-          <Typo color={colors.white} fontWeight={"700"}>
+          <Typo color={colors.white} fontWeight={"500"} size={15}>
             Update
           </Typo>
         </Button>
