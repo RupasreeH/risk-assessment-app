@@ -6,22 +6,16 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from googlesearch import search
 from bs4 import BeautifulSoup
-import spacy
-import re
 import json
-from spacy.matcher import Matcher
 from flask import Flask, jsonify, request, Blueprint
 from math import exp
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from sentence_transformers import SentenceTransformer, util  # Import SBERT and cosine similarity
 from openai import OpenAI
 from dotenv import load_dotenv
 import ast
 
 risksearch = Blueprint('search', __name__, template_folder='templates')
 
-nlp = spacy.load("en_core_web_sm")
-sbert_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')  # Load SBERT model
 load_dotenv()
 
 OpenAI.api_key = os.getenv("OPENAI_API_KEY")
@@ -29,89 +23,65 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI()
 
 
-def align_sentence(sent):
-    sent_split = sent.split()
-    result_sent_list = []
-    for string in sent_split:
-        if string.isupper():
-            result_sent_list.append(string)
-        else:
-            y = ''
-            for idx, i in enumerate(string):
-                if i.isupper() and idx != 0:
-                    i = ' ' + i
-                y += i
-            result_sent_list.append(y)
-    return ' '.join(result_sent_list)
-
-def is_noise_line(line):
-    """Heuristics to detect if the line is part of navigation, ads, or common footer/header."""
-    noise_keywords = [
-        "menu", "navigation", "privacy policy", "terms of service", "login", "subscribe",
-        "more", "about", "footer", "contact us", "©", "cookie", "follow us", "back to top"
-    ]
-    return any(keyword in line.lower() for keyword in noise_keywords)
-
-def clean_scraped_data(soup, query_name):
-    """Advanced cleaning to filter irrelevant data and focus on person-related information."""
-    data_into_list = []
-
-    for element in soup.find_all(['div', 'p']):
-        text_content = element.get_text().strip()
-        if text_content and not text_content.isspace():
-            data_into_list.append(text_content)
-
-    cleaned_data = []
-    for line in data_into_list:
-        if not is_noise_line(line):
-            cleaned_data.append(line)
-
-    final_cleaned_data = []
-    for line in cleaned_data:
-        doc = nlp(line)
-        entities = [ent.text for ent in doc.ents]
-        if any(query_name.lower() in ent.lower() for ent in entities) or entities:
-            final_cleaned_data.append(line)
-
-    final_cleaned_data = list(set(final_cleaned_data))  # Remove duplicates
-
-    return final_cleaned_data
-
-def extract_pii_with_gpt(data_into_list, attributes, target_name, model="gpt-4o"):
+def extract_pii_with_gpt(data_into_list, attributes, target_name, model="gpt-4o-mini"):
     """
-    Extract PII attributes using GPT and store results in the existing attributes dictionary.
+        Modified version to extract PII attributes using GPT from structured, meaningful paragraphs
+        rather than just lines of text.
 
-    Args:
-    - data_into_list (list): List of strings containing web-scraped data.
-    - attributes (dict): Dictionary containing sets for each PII attribute.
-    - model (str): OpenAI model to use for the extraction.
+        Args:
+        - data_into_list (list): List of structured paragraphs with meaningful context about target person
+        - attributes (dict): Dictionary containing sets for each PII attribute
+        - target_name (str): Name of the target person
+        - model (str): OpenAI model to use for the extraction
 
-    Returns:
-    - dict: Updated attributes dictionary with extracted PII values or empty sets where no values are found.
+        Returns:
+        - dict: Updated attributes dictionary with extracted PII values
     """
     # Combine the data into a single input for GPT
-    input_data = "\n".join(data_into_list)
-    print(target_name)
+    # Include separator lines to help GPT understand the structure
+    input_data = "\n\n".join(data_into_list)
 
-    # Define system and user prompts
+    print(f"Extracting PII attributes for: {target_name}")
+    print(f"Input data length: {len(input_data)} characters")
+
+    # Define system and user prompts optimized for contextual extraction
     system_prompt = (
-        f"You are an advanced NLP assistant specializing in extracting Personally Identifiable Information (PII) from unstructured text. "
-        f"Extract PII only for the individual named: {target_name}. Ignore any PII that does not belong to this person. "
-        f"If certain attributes are missing, explicitly return an empty string for those fields. "
-        f"Ensure extracted data follows the correct structure and is free from formatting errors."
+        f"You are an advanced NLP system specialized in extracting Personally Identifiable Information (PII) "
+        f"from contextual, multi-paragraph text about a person. You excel at finding both explicit and implicit "
+        f"personal details while ensuring high accuracy and proper attribution."
     )
 
     user_prompt = (
-        "Extract all possible Personally Identifiable Information (PII) from the following unstructured document:\n\n"
+        "Extract all possible Personally Identifiable Information (PII) from the following structured text about "
+        f"{target_name}:\n\n"
         f"{input_data}\n\n"
-        "Follow these strict guidelines while extracting PII:\n"
-        "1. Extract Name, Location, Email, Phone, DOB, Address, Gender, Employer, Education, Birth Place, Personal Cell, "
-        "Business Phone, Social Media Accounts (Facebook, Twitter, Instagram), Driver’s License (DDL), Passport, Credit Card, and SSN.\n"
-        "2. If a field is missing or unidentifiable, return an empty string `''` for that attribute.\n"
-        "3. Preserve full names, emails, and phone numbers without modifying their structure.\n"
-        "4. Extract dates (such as DOB) in `MM-DD-YYYY` format where possible.\n"
-        "5. If the document is unstructured and includes multiple individuals, locate {target_name} and extract only their PII.\n"
-        "6. If multiple values exist for an attribute (e.g., multiple emails), return them as a **comma-separated string**.\n"
+        "Guidelines for extraction:\n"
+        "1. Extract the following attributes (provide empty string if not found):\n"
+        "   - Name: Full name, including variations or nicknames\n"
+        "   - Location: Current city/state/country of residence\n"
+        "   - Email: Any email addresses\n"
+        "   - Phone: Any phone numbers (personal or unspecified)\n"
+        "   - DOB: Date of birth in MM-DD-YYYY format when possible\n"
+        "   - Address: Full or partial physical addresses\n"
+        "   - Gender: Gender information\n"
+        "   - Employer: Current employer or business affiliation\n"
+        "   - Education: Schools attended, degrees earned\n"
+        "   - Birth Place: City/state/country of birth\n"
+        "   - Personal Cell: Mobile phone numbers specifically\n"
+        "   - Business Phone: Work-related phone numbers\n"
+        "   - Facebook Account: Facebook username or profile info\n"
+        "   - Twitter Account: Twitter handle or profile info\n"
+        "   - Instagram Account: Instagram username or profile info\n"
+        "   - DDL: Driver's license information\n"
+        "   - Passport: Passport information\n"
+        "   - Credit Card: Credit card details\n"
+        "   - SSN: Social Security Number\n\n"
+
+        "2. PAY SPECIAL ATTENTION to URL patterns, page titles, and metadata that might contain PII.\n"
+        "3. For multiple values of the same attribute, use comma-separated strings.\n"
+        "4. ONLY extract information about the target person, not others mentioned in the text.\n"
+        "5. Use exactly these field names in your response.\n"
+        "6. Return a valid JSON dictionary with the field names listed above.\n"
         "7. Do **not** include extra text, explanations, or additional details outside of the requested attributes.\n\n"
         "Format the final response as a **valid JSON dictionary**:\n"
         "{\n"
@@ -137,6 +107,7 @@ def extract_pii_with_gpt(data_into_list, attributes, target_name, model="gpt-4o"
         "}\n"
         "Ensure the response is **valid JSON** without extra text or explanations."
     )
+
     extracted_pii = None  # Initialize the variable to avoid reference errors
 
     try:
@@ -201,121 +172,10 @@ def extract_pii_with_gpt(data_into_list, attributes, target_name, model="gpt-4o"
     print("[DEBUG] Final attributes dictionary:\n", attributes)
     return attributes
 
-def dob_pattern(text):
-    doc = nlp(text)
-    list_return = []
-
-    pattern_dob_year = [{'LOWER': 'born', 'POS': 'VERB'}, {'POS': 'NUM', 'LENGTH': 4}]
-    pattern_dob = [{'LOWER': 'born', 'POS': 'VERB'}, {'POS': 'NUM'}, {'POS': 'PROPN'}, {'POS': 'NUM'}]
-
-    matcher = Matcher(nlp.vocab, validate=True)
-    matcher.add('Year_of_Birth', [pattern_dob_year])
-    matcher.add('Date_of_Birth', [pattern_dob])
-
-    found_matches = matcher(doc)
-
-    if found_matches:
-        for match_id, start_pos, end_pos in found_matches:
-            string_id = nlp.vocab.strings[match_id]
-            span = doc[start_pos:end_pos]
-            list_return = [string_id, span.text[5:], start_pos, end_pos]
-    else:
-        pattern_born = [{'LOWER': 'born', 'POS': 'VERB'}]
-        matcher = Matcher(nlp.vocab, validate=True)
-        matcher.add('born', [pattern_born])
-        first_match = matcher(doc)
-
-        if first_match:
-            pattern_dob1 = [{'POS': 'NUM'}, {'POS': 'PROPN'}, {'POS': 'NUM', 'LENGTH': 4}]
-            matcher1 = Matcher(nlp.vocab, validate=True)
-            matcher1.add('Date_of_Birth1', [pattern_dob1])
-            found_matches = matcher1(doc)
-            for match_id, start_pos, end_pos in found_matches:
-                string_id = nlp.vocab.strings[match_id]
-                span = doc[start_pos:end_pos]
-                list_return = [string_id, span.text, start_pos, end_pos]
-
-    return list_return
-
-def find_social_media_acnt(inp_list, line):
-    id_name_type = []
-    dictSocialMedia = {"https://www.instagram.com": "Instagram ID", ".linkedin.com": "LinkedIn Profile",
-                       "https://www.facebook.com": "Facebook ID", "twitter.com": "Twitter ID"}
-    for soc_med_type in inp_list:
-        li = list(line.split(' '))
-        for idx, i in enumerate(li):
-            if soc_med_type in i and soc_med_type != 'https://www.facebook.com':
-                id_name_type.append([li[idx + 2], dictSocialMedia[soc_med_type]])
-                break
-            if soc_med_type in i and soc_med_type == 'https://www.facebook.com':
-                if li[idx + 2] in ('public', 'people'):
-                    if str(li[idx + 4])[-1]:
-                        id_name_type.append([li[idx + 4] + li[idx + 5], dictSocialMedia[soc_med_type]])
-                    else:
-                        id_name_type.append([li[idx + 4], dictSocialMedia[soc_med_type]])
-                    break
-                id_name_type.append([li[idx + 2], dictSocialMedia[soc_med_type]])
-    return id_name_type
-
-def gender_pattern(text):
-    gender_keywords = ['he', 'she', 'his', 'her', 'male', 'female', 'gender']
-    doc = nlp(text.lower())
-    for token in doc:
-        if token.text in gender_keywords:
-            return token.text.capitalize()
-    return None
-
-def education_pattern(text):
-    education_keywords = ['university', 'college', 'degree', 'bachelor', 'master', 'phd']
-    doc = nlp(text.lower())
-    for token in doc:
-        if any(keyword in token.text for keyword in education_keywords):
-            return token.text.capitalize()
-    return None
-
-def birth_place_pattern(text):
-    doc = nlp(text)
-    for ent in doc.ents:
-        if ent.label_ == "GPE":  # GPE refers to geographical locations
-            return ent.text
-    return None
-
-def ssn_pattern(text):
-    match = re.search(r'\b\d{3}-\d{2}-\d{4}\b', text)
-    return match.group(0) if match else None
-
-def passport_pattern(text):
-    match = re.search(r'\b[A-PR-WYa-pr-wy][1-9]\d\s?\d{4}[1-9]\b', text)
-    return match.group(0) if match else None
-
-def credit_card_pattern(text):
-    match = re.search(r'\b(?:\d[ -]*?){13,16}\b', text)
-    return match.group(0) if match else None
-
-def ddl_pattern(text):
-    match = re.search(r'\b[A-Za-z]\d{7}\b', text)  # Common pattern for driver's license numbers
-    return match.group(0) if match else None
-
-def business_phone_pattern(text):
-    match = re.search(r'\b[\+]{0,1}[\d]{1,4}[\s-]{0,1}[\d]{1,4}[\s-]{0,1}[\d]{2,4}[\s-]{0,1}[\d]{2,4}\b',
-                      text)  # Generic business phone pattern
-    return match.group(0) if match else None
-
-def append_list(output_match_term, output_word, output_line, output_list_span_start, output_list_span_end,
-                output_list_search, output_list_url_no, output_list_line_no, output_list_match_count, inp_list):
-    output_match_term.append(inp_list[0])
-    output_word.append(inp_list[1])
-    output_line.append(inp_list[2])
-    output_list_span_start.append(inp_list[3])
-    output_list_span_end.append(inp_list[4])
-    output_list_search.append(inp_list[5])
-    output_list_url_no.append(inp_list[6])
-    output_list_line_no.append(inp_list[7])
-    output_list_match_count.append(inp_list[8])
-
 def calculate_privacy_score(willingness_measure, resolution_power, beta_coefficient):
     privacy_score = 1 / exp(beta_coefficient * (1 - willingness_measure) * resolution_power)
     return privacy_score
+
 
 def calculate_overall_risk_score(pii_attributes, weights, willingness_measures, resolution_powers, beta_coefficients):
     overall_risk_score = 0
@@ -334,16 +194,22 @@ def calculate_overall_risk_score(pii_attributes, weights, willingness_measures, 
 
 async def extract_page_metadata(html_content, url):
     """
-    Extract metadata from a webpage including title, description, and keywords.
+    Extract comprehensive metadata from a webpage.
 
     Args:
         html_content (str): The HTML content of the webpage
         url (str): The URL of the webpage
 
     Returns:
-        dict: A dictionary containing the webpage metadata
+        dict: A dictionary containing detailed webpage metadata
     """
     soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Basic URL analysis for domain and path
+    from urllib.parse import urlparse
+    parsed_url = urlparse(url)
+    domain = parsed_url.netloc
+    path = parsed_url.path
 
     # Extract title
     title = soup.title.string if soup.title else "No title available"
@@ -355,6 +221,16 @@ async def extract_page_metadata(html_content, url):
     # Extract meta keywords
     keywords_tag = soup.find("meta", {"name": "keywords"})
     keywords = keywords_tag.get("content", "") if keywords_tag else ""
+
+    # Extract Open Graph metadata
+    og_title = soup.find("meta", {"property": "og:title"})
+    og_title = og_title.get("content", "") if og_title else ""
+
+    og_description = soup.find("meta", {"property": "og:description"})
+    og_description = og_description.get("content", "") if og_description else ""
+
+    og_site_name = soup.find("meta", {"property": "og:site_name"})
+    og_site_name = og_site_name.get("content", "") if og_site_name else ""
 
     # Extract a snippet of text (first paragraph or visible text)
     snippet = ""
@@ -368,91 +244,353 @@ async def extract_page_metadata(html_content, url):
         visible_text = soup.get_text().strip()
         snippet = visible_text[:200] + "..." if len(visible_text) > 200 else visible_text
 
-    # Create webpage info object
+    # Extract heading content as it's often very relevant
+    h1_content = [h.text.strip() for h in soup.find_all('h1') if h.text.strip()]
+    h2_content = [h.text.strip() for h in soup.find_all('h2') if h.text.strip()]
+
+    h1_text = h1_content[0] if h1_content else ""
+    h2_text = "; ".join(h2_content[:3]) if h2_content else ""  # Just include first few h2s
+
+    # Create webpage info object with enhanced metadata
     webpage_info = {
         "url": url,
+        "domain": domain,
         "title": title,
-        "description": description if description else snippet,
-        "keywords": keywords
+        "h1": h1_text,
+        "h2_summary": h2_text,
+        "description": description if description else og_description if og_description else snippet,
+        "site_name": og_site_name if og_site_name else domain,
+        "keywords": keywords,
+        "snippet": snippet
     }
 
     return webpage_info
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(aiohttp.ClientError))
+
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(1),
+       retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)))
 async def fetch_url(session, url):
+    """
+    Fetch URL content with improved error handling and timeout management.
+
+    Args:
+        session (ClientSession): The aiohttp session to use
+        url (str): The URL to fetch
+
+    Returns:
+        str: The HTML content of the URL
+
+    Raises:
+        Exception: If the URL cannot be fetched after retries
+    """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36'}
-    timeout = ClientTimeout(total=10)
-    async with session.get(url, headers=headers, timeout=timeout) as response:
-        response.raise_for_status()
-        return await response.text()
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache',
+    }
+
+    # Use a shorter timeout to fail faster on problematic URLs
+    timeout = ClientTimeout(total=15, connect=5, sock_connect=5, sock_read=15)
+
+    try:
+        async with session.get(url, headers=headers, timeout=timeout, allow_redirects=True) as response:
+            # Check for HTTP errors
+            if response.status >= 400:
+                raise aiohttp.ClientResponseError(
+                    response.request_info,
+                    response.history,
+                    status=response.status,
+                    message=f"HTTP Error {response.status}",
+                    headers=response.headers
+                )
+
+            # Check content type to ensure it's HTML
+            content_type = response.headers.get('Content-Type', '')
+            if not ('text/html' in content_type.lower() or 'application/xhtml+xml' in content_type.lower()):
+                raise ValueError(f"Unsupported content type: {content_type}")
+
+            # Get the content
+            html_content = await response.text()
+
+            # Basic validation of the content
+            if not html_content or len(html_content) < 500:  # Very small responses are likely errors
+                raise ValueError("Response too small or empty")
+
+            return html_content
+
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
+        print(f"Error fetching {url}: {str(e)}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error fetching {url}: {str(e)}")
+        raise
+
 
 async def get_search_results_metadata(query):
     """
-    Search for query on Google and return metadata for each result.
+    Search for query on Google and return comprehensive metadata for each result.
+    This improved version filters out URLs that can't be fetched and includes enhanced metadata.
 
     Args:
         query (str): The search query (person's name)
 
     Returns:
-        list: A list of dictionaries containing metadata for each search result
+        list: A list of dictionaries containing detailed metadata for each successfully fetched search result
     """
-    #urls = [url for url in search(query, tld="com", num=21, stop=21, pause=2)]
-    urls = []
-    for url in search(query, num_results=21, safe=None):
-        urls.append(url)
-        print("Inside search delay")
-        print(urls)
-        time.sleep(random.uniform(0, 1)) 
+    # Try different approaches based on which package might be installed
+    try:
+        # For google package
+        from googlesearch import search
+        urls = [url for url in search(query, num=25, stop=25, pause=2)]
+    except TypeError:
+        try:
+            # Alternative approach for older/different versions
+            from googlesearch import search
+            urls = [url for url in search(query, num_results=25, sleep_interval=2)]
+        except (TypeError, AttributeError):
+            try:
+                # For google-search-results package (serpapi)
+                from serpapi import GoogleSearch
+
+                # You'll need an API key for this
+                serpapi_key = os.getenv("SERPAPI_API_KEY")
+                if not serpapi_key:
+                    raise ValueError("SERPAPI_API_KEY environment variable not set")
+
+                search_params = {
+                    "q": query,
+                    "num": 25,
+                    "api_key": serpapi_key
+                }
+                search_results = GoogleSearch(search_params).get_dict()
+                urls = [result.get('link') for result in search_results.get('organic_results', [])]
+            except (ImportError, ValueError):
+                # Fallback to a simple list of dummy URLs for testing
+                print("WARNING: No suitable search package found. Using test URLs.")
+                urls = [
+                    f"https://example.com/profile/{query.replace(' ', '-').lower()}",
+                    f"https://linkedin.com/in/{query.replace(' ', '-').lower()}",
+                    f"https://twitter.com/{query.replace(' ', '').lower()}",
+                    f"https://facebook.com/{query.replace(' ', '.').lower()}",
+                    f"https://example.org/about/{query.replace(' ', '_').lower()}"
+                ]
+
     print(f"Found {len(urls)} URLs for query: {query}")
 
     webpages_metadata = []
+    successful_urls = 0
 
     async with ClientSession() as session:
         for url in urls:
-            if url.endswith('.pdf') or '-image?' in url:
+            # Skip certain file types that we can't process
+            if url.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx')) or '-image?' in url:
+                print(f"Skipping unsupported file type: {url}")
                 continue
 
             try:
+                # Try to fetch the URL with a reasonable timeout
                 html_content = await fetch_url(session, url)
-                metadata = await extract_page_metadata(html_content, url)
-                webpages_metadata.append(metadata)
-                print(f"Extracted metadata from: {url}")
-            except Exception as e:
-                print(f"Error fetching or processing URL {url}: {e}")
-                # Add a basic entry even if we couldn't fetch the full metadata
-                webpages_metadata.append({
-                    "url": url,
-                    "title": "",
-                    "description": "",
-                    "keywords": ""
-                })
 
+                # Extract comprehensive metadata
+                metadata = await extract_page_metadata(html_content, url)
+
+                # Look for simple indicators that this page might be relevant to our search
+                # This helps prioritize more relevant pages in the results
+                relevance_score = 0
+                query_terms = query.lower().split()
+
+                # Check title, description, headings for query terms
+                for term in query_terms:
+                    if term in metadata["title"].lower():
+                        relevance_score += 3  # Title matches are highly relevant
+                    if term in metadata["description"].lower():
+                        relevance_score += 2  # Description matches are relevant
+                    if term in metadata["h1"].lower():
+                        relevance_score += 2  # H1 matches are relevant
+                    if term in metadata["h2_summary"].lower():
+                        relevance_score += 1  # H2 matches are somewhat relevant
+
+                # Add relevance score to metadata
+                metadata["relevance_score"] = relevance_score
+
+                webpages_metadata.append(metadata)
+                successful_urls += 1
+                print(f"Successfully extracted metadata from: {url} (relevance: {relevance_score})")
+
+                # If we have enough successful URLs, we can stop
+                if successful_urls >= 15:  # Set a reasonable limit for the number of results
+                    break
+
+            except Exception as e:
+                # If URL can't be fetched, don't include it in the results
+                print(f"Error fetching or processing URL {url}: {e}")
+                # We don't add anything to webpages_metadata for failed URLs
+
+    # Sort results by relevance score (most relevant first)
+    webpages_metadata = sorted(webpages_metadata, key=lambda x: x["relevance_score"], reverse=True)
+
+    print(f"Returning {len(webpages_metadata)} successfully fetched URLs")
     return webpages_metadata
 
-
-async def scrape_selected_urls(urls):
+async def clean_webpage_with_gpt(html_content, url, target_name, model="gpt-4o-mini"):
     """
-    Scrape content from user-selected URLs.
+    Use GPT to analyze a webpage and its metadata to extract structured information relevant to the target person.
+    This enhanced version includes page metadata (title, description, URL) in the analysis.
+
+    Args:
+        html_content (str): The HTML content of the webpage
+        url (str): The URL of the webpage
+        target_name (str): The name of the person we're looking for information about
+        model (str): OpenAI model to use for analysis
+
+    Returns:
+        list: A list containing meaningful paragraphs about the target person with PII information
+    """
+    try:
+        # Parse the HTML content
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Extract metadata
+        page_title = soup.title.string if soup.title else "Untitled Page"
+
+        # Extract meta description
+        description_tag = soup.find("meta", {"name": "description"})
+        meta_description = description_tag.get("content", "") if description_tag else ""
+
+        # Extract meta keywords
+        keywords_tag = soup.find("meta", {"name": "keywords"})
+        meta_keywords = keywords_tag.get("content", "") if keywords_tag else ""
+
+        # Get any OpenGraph metadata which often contains rich information
+        og_title = soup.find("meta", {"property": "og:title"})
+        og_title = og_title.get("content", "") if og_title else ""
+
+        og_description = soup.find("meta", {"property": "og:description"})
+        og_description = og_description.get("content", "") if og_description else ""
+
+        # Extract the text content
+        parsed_text = soup.get_text()
+
+        # Basic preprocessing to make the text more manageable
+        text = parsed_text.split('\n')
+        text = list(filter(lambda x: x not in ('', '\r') and not x.isspace(), text))
+
+        # Join a reasonable amount of text to send to GPT
+        combined_text = "\n".join(text)
+        truncated_text = combined_text[:20000]  # Limit to 20K chars to avoid token limits
+
+        # Define system and user prompts for a more structured analysis
+        system_prompt = (
+            f"You are an expert analyst specializing in identifying and organizing personal information "
+            f"from web content and metadata. Your expertise is in finding, contextualizing, and "
+            f"structuring personal information in a meaningful way."
+        )
+
+        user_prompt = (
+            f"I'm looking for information about {target_name}. Please analyze both the webpage content and its metadata.\n\n"
+            f"METADATA:\n"
+            f"URL: {url}\n"
+            f"Page Title: {page_title}\n"
+            f"Meta Description: {meta_description}\n"
+            f"Meta Keywords: {meta_keywords}\n"
+            f"OG Title: {og_title}\n"
+            f"OG Description: {og_description}\n\n"
+            f"WEBPAGE CONTENT:\n{truncated_text}\n\n"
+
+            f"Please create a comprehensive summary of ALL information about {target_name}. "
+            f"Focus on extracting personal identifiable information (PII) and organizing it into a meaningful narrative.\n\n"
+
+            f"Instructions:\n"
+            f"1. First, analyze the URL, title, and metadata for any information about {target_name}.\n"
+            f"2. Then, analyze the webpage content and create a thorough summary of all information found.\n"
+            f"3. Specifically look for and include ANY of these personal attributes if found:\n"
+            f"   - Full name (including variations, nicknames, or formal names)\n"
+            f"   - Location information (current location, hometown, places lived)\n"
+            f"   - Contact details (email addresses, phone numbers)\n"
+            f"   - Birth information (date of birth, age, birthplace)\n"
+            f"   - Addresses (current or past residences, work addresses)\n"
+            f"   - Gender information\n"
+            f"   - Employment details (current employer, job title, work history)\n"
+            f"   - Educational background (schools, degrees, graduation years)\n"
+            f"   - Social media accounts (Facebook, Twitter, Instagram, etc.)\n"
+            f"   - Any sensitive information (driver's license, passport numbers, financial info, etc.)\n\n"
+
+            f"4. IMPORTANT: Format your response as a collection of detailed paragraphs that provide CONTEXT for the information. "
+            f"   Don't just list facts - explain how they relate to the person and where/how they were mentioned.\n"
+            f"5. If information seems contradictory, include all versions and note the contradiction.\n"
+            f"6. Include ONLY information about {target_name}. Ignore information about other people.\n"
+            f"7. If absolutely no information about {target_name} is found, respond with: 'NO_RELEVANT_INFORMATION'\n\n"
+
+            f"Your goal is to create a comprehensive profile that captures ALL possible PII about {target_name} from this webpage "
+            f"and its metadata in a way that preserves context and meaning."
+        )
+
+        # Make a request to GPT
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.1,  # Very low temperature for consistency
+            max_tokens=15000  # Allow for detailed response
+        )
+
+        # Get the GPT response
+        gpt_response = response.choices[0].message.content.strip()
+
+        # If no information was found, return empty list
+        if gpt_response == "NO_RELEVANT_INFORMATION":
+            print(f"No relevant information found about {target_name} on this webpage and its metadata.")
+            return []
+
+        # Split into paragraphs for easier processing later
+        paragraphs = gpt_response.split('\n\n')
+        cleaned_paragraphs = [p.strip() for p in paragraphs if p.strip()]
+
+        # Log the extracted information for debugging
+        print(f"Extracted {len(cleaned_paragraphs)} meaningful paragraphs about {target_name} from {url}")
+
+        return cleaned_paragraphs
+
+    except Exception as e:
+        print(f"Error in clean_webpage_with_gpt: {e}")
+        # Return an empty list if there's an error
+        return []
+
+
+async def scrape_selected_urls(urls, target_name):
+    """
+    Scrape content from user-selected URLs and clean it using GPT.
+    This updated version passes URL information to the cleaning function to include metadata analysis.
 
     Args:
         urls (list): List of URLs to scrape
+        target_name (str): Name of the person we're looking for
 
     Returns:
-        tuple: (list of raw responses, list of URLs, boolean indicating if no data was found)
+        tuple: (list of structured content about the target person, boolean indicating if no data was found)
     """
-
     if not urls:
-        return [], [], True
-    relevant_responses = []
-    relevant_urls = []
+        return [], True
+
+    all_cleaned_data = []
+    url_count = 0
+    success_count = 0
 
     async with ClientSession() as session:
         for url in urls:
+            url_count += 1
             if url.endswith('.pdf') or '-image?' in url:
+                print(f"Skipping unsupported file type: {url}")
                 continue
 
             try:
+                print(f"Fetching URL {url_count}/{len(urls)}: {url}")
                 response = await fetch_url(session, url)
 
                 # Check if the response is an exception
@@ -460,32 +598,64 @@ async def scrape_selected_urls(urls):
                     print(f"Error fetching URL {url}: {response}")
                     continue
 
-                relevant_responses.append(response)
-                relevant_urls.append(url)
+                # Use enhanced GPT function to extract meaningful information from this webpage and its metadata
+                print(f"Processing content from {url}...")
+                # Pass the URL to the clean_webpage_with_gpt function
+                cleaned_data = await clean_webpage_with_gpt(response, url, target_name)
+
+                if cleaned_data:
+                    success_count += 1
+                    # Add source information as the first element
+                    source_info = f"The following information was found on: {url}"
+                    all_cleaned_data.append(source_info)
+
+                    # Add the structured paragraphs
+                    all_cleaned_data.extend(cleaned_data)
+
+                    # Add a separator between different URLs
+                    all_cleaned_data.append("---")
+
+                    print(f"Successfully extracted information from {url} ({len(cleaned_data)} paragraphs)")
+                else:
+                    print(f"No relevant information found on {url}")
 
             except Exception as e:
-                print(f"Error fetching or processing URL {url}: {e}")
+                print(f"Error processing URL {url}: {e}")
 
-        if not relevant_responses:
-            return [], [], True
+    # Remove the last separator if it exists
+    if all_cleaned_data and all_cleaned_data[-1] == "---":
+        all_cleaned_data.pop()
 
+    print(f"Processed {url_count} URLs, found relevant information on {success_count} URLs")
+    print(f"Total paragraphs of information: {len(all_cleaned_data)}")
 
+    if not all_cleaned_data:
+        return [], True
 
-    return relevant_responses, relevant_urls, False
+    return all_cleaned_data, False
+
 
 @risksearch.route('/', methods=["GET"])
 async def risk_search():
     """Endpoint to search for a person and return webpage metadata for disambiguation"""
-    print("This is risk_search()")
     query = request.args.get('searchName', '')
     if not query:
         return jsonify({"error": "No search query provided"}), 400
 
     try:
+        # Get enhanced metadata with relevance scoring
         webpages_metadata = await get_search_results_metadata(query)
+
+        if not webpages_metadata:
+            return jsonify(
+                {"message": "No relevant web results found for this name. Try a different search term."}), 404
+
         return jsonify({"webpages": webpages_metadata})
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 @risksearch.route('/extract', methods=["POST"])
 async def extract_pii():
@@ -511,64 +681,15 @@ async def extract_pii():
 
     try:
         print("About to scrape selected URLs")
-        responses, urls, no_relevant_data = await scrape_selected_urls(selected_urls)
 
-        print(f"Responses type: {type(responses)}, length: {len(responses)}")
-        print(f"First response sample (truncated): {str(responses[0])[:100] if responses else 'No response'}")
-        print(f"URLs returned: {urls}")
-        print(f"No relevant data flag: {no_relevant_data}")
+        # Get cleaned data from selected URLs
+        cleaned_data, no_relevant_data = await scrape_selected_urls(selected_urls, target_name)
+
+        print(f"Cleaned data length: {len(cleaned_data)}")
+        print(f"Sample cleaned data: {cleaned_data[:5] if cleaned_data else 'No data'}")
+
         if no_relevant_data:
-            return jsonify({"message": "No Data Found."})
-        data_into_list = []
-
-        for idx, response in enumerate(responses):
-            if isinstance(response, Exception):
-                print(f"Error fetching URL {urls[idx]}: {response}")
-                continue
-            soup = BeautifulSoup(response, 'html.parser')
-
-            #cleaned_data = clean_scraped_data(soup, query)
-
-
-            parsed_text = soup.get_text()
-            text = parsed_text.split('\n')
-            text = list(filter(lambda x: x not in ('', '\r'), text))
-
-            for line in text:
-                if not line.isspace():
-                    if idx == 20 and 'https://' in line:
-                        line = line.replace('https://', ' https://')
-                    aligned_line = align_sentence(line.strip())
-                    data_into_list.append(aligned_line)
-                    splitted_lines_list = re.split(r'\. |\.\[', aligned_line)
-                    #data_into_list.extend(splitted_lines_list)
-        #extracted_addresses = address_pattern(data_into_list, query)
-
-        # Print relevant sentences
-        print("\n=== Relevant Sentences ===")
-        for line in data_into_list:
-            print(line)
-
-        if not data_into_list:
-            return jsonify({"message": "No Data Found."})
-
-        output_match_term = []
-        output_word = []
-        output_line = []
-        output_list_span_start = []
-        output_list_span_end = []
-        output_list_search = []
-        output_list_url_no = []
-        output_list_line_no = []
-        output_list_match_count = []
-
-        name_split = target_name.lower().split()
-        phone_pattern = [
-            r'[\d]?[(]{1}[\d]{3}[)]{1}[\s]?[\d]{3}[-\s]{1}[\d]{4}',
-            r'[+]{1}[\d]{2}[\s]{1}[(]?[\+]?[)]?[\d]{2}[\s]{1}[\d]{4}[\s]{1}[\d]{4}',
-            r'[+]{1}[\d]{2}[\s]{1}[(]?[\d]?[)]?[\d]{3}[\s]{1}[\d]{3}[\s]{1}[\d]{3}',
-            r'[\d]{3}[-\s]{1}[\d]{3}[-\s]{1}[\d]{4}'
-        ]
+            return jsonify({"message": "No relevant data found about this person."})
 
         attributes = {
             'Name': set(),
@@ -592,10 +713,11 @@ async def extract_pii():
             'SSN': set()
         }
 
-        if not data_into_list:
-            return jsonify({"message": "No Data Found."})
+        print("This is Cleaned Data")
+        for line in cleaned_data:
+            print(line)
 
-        attributes = extract_pii_with_gpt(data_into_list, attributes,target_name)
+        attributes = extract_pii_with_gpt(cleaned_data, attributes, target_name)
 
         def print_attributes(attributes):
             """
@@ -610,7 +732,6 @@ async def extract_pii():
             print("==============================\n")
 
         print_attributes(attributes)
-
 
         dictionary = {key: list(value) for key, value in attributes.items()}
 
@@ -627,7 +748,6 @@ async def extract_pii():
             print("==============================\n")
 
         print_attributes(attributes)
-
 
         pii_attributes = list(dictionary.keys())
 
