@@ -51,15 +51,13 @@ const Suggestions = () => {
         resolutionPower,
         betaCoefficient
       );
-      console.log(`${key}`, privacyScore);
-      console.log(`${key}`, weight * privacyScore);
       information.push({
         key: key,
         score: weight * privacyScore,
       });
     });
 
-    setInformationText(information);
+    setInformationText(information.sort((a, b) => a.score - b.score));
   }, [results]);
   return (
     <View style={styles.container}>
