@@ -57,7 +57,7 @@ const Suggestions = () => {
       });
     });
 
-    setInformationText(information.sort((a, b) => a.score - b.score));
+    setInformationText(information.sort((a, b) => b.score - a.score));
   }, [results]);
   return (
     <View style={styles.container}>
