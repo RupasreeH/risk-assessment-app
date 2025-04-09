@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
 import GaugeMeter from "@/components/Gauge";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView } from "react-native";
 import { colors, radius } from "@/constants/theme";
 import { useAuth } from "@/context/authContext";
 import Loading from "@/components/Loading";
@@ -12,6 +12,7 @@ import Typo from "@/components/Typo";
 import { Choice, Option } from "@/types";
 import ChoiceList from "@/components/ChoiceList";
 import Dropdown from "@/components/Dropdown";
+import Suggestions from "@/components/Suggestions";
 
 const Home = () => {
   const [isLoading, setIsloading] = useState(false);
@@ -100,43 +101,14 @@ const Home = () => {
           </Button>
         </View>
       </View>
-      {showCheckBox && checkBoxList.length > 0 && (
-        <View style={styles.checkBoxContainer}>
-          <ChoiceList list={checkBoxList} onPress={handleChoice} />
-          <Button
-            loading={isLoading}
-            onPress={handleSubmit}
-            disabled={!selectUrlList.length}
-          >
-            <Typo fontWeight={"500"} color={colors.white} size={15}>
-              Submit
-            </Typo>
-          </Button>
-        </View>
-      )}
-      {isLoading && <Loading showSuggestions={true} />}
-      {results?.risk_score > 0 && (
-        <View style={styles.container}>
-          <GaugeMeter
-            percentage={results.risk_score}
-            score={results.risk_level}
-            size={300}
-          />
-        </View>
-      )}
-      {results?.risk_score > 0 && (
-        <View style={{ padding: 10 }}>
-          <Button loading={isLoading} onPress={() => router.push("/details")}>
-            <Typo fontWeight={"500"} color={colors.white} size={15}>
-              More Details
-            </Typo>
-          </Button>
-        </View>
-      )}
       {results?.risk_score === 0 ||
         (showCheckBox && checkBoxList.length <= 0 && (
           <View
-            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
           >
             <Typo fontWeight={"500"} color={colors.neutral500} size={25}>
               No Data Found
@@ -148,7 +120,7 @@ const Home = () => {
           style={{
             flex: 1,
             justifyContent: "center",
-            alignItems: "center",
+            alignContent: "center",
             padding: 10,
           }}
         >
@@ -162,6 +134,48 @@ const Home = () => {
             risk assessment.
           </Typo>
         </View>
+      )}
+      {isLoading && <Loading showSuggestions={true} />}
+      {(results || showCheckBox) && (
+        <ScrollView>
+          {showCheckBox && checkBoxList.length > 0 && (
+            <View style={styles.checkBoxContainer}>
+              <ChoiceList list={checkBoxList} onPress={handleChoice} />
+              <Button
+                loading={isLoading}
+                onPress={handleSubmit}
+                disabled={!selectUrlList.length}
+              >
+                <Typo fontWeight={"500"} color={colors.white} size={15}>
+                  Submit
+                </Typo>
+              </Button>
+            </View>
+          )}
+
+          {results?.risk_score > 0 && (
+            <View style={styles.container}>
+              <GaugeMeter
+                percentage={results.risk_score}
+                score={results.risk_level}
+                size={300}
+              />
+            </View>
+          )}
+          {results?.risk_score > 0 && (
+            <View style={{ padding: 10 }}>
+              <Button
+                loading={isLoading}
+                onPress={() => router.push("/details")}
+              >
+                <Typo fontWeight={"500"} color={colors.white} size={15}>
+                  More Details
+                </Typo>
+              </Button>
+            </View>
+          )}
+          {results?.risk_score > 0 && <Suggestions />}
+        </ScrollView>
       )}
     </ScreenWrapper>
   );
@@ -177,7 +191,6 @@ const styles = StyleSheet.create({
   checkBoxContainer: {
     backgroundColor: "#ffffff",
     padding: 10,
-    marginBottom: 170,
   },
   endIcon: {
     padding: 21,

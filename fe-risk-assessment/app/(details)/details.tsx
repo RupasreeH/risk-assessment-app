@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import React from "react";
 import Typo from "../../components/Typo";
 import ScreenWrapper from "../../components/ScreenWrapper";
@@ -9,11 +9,14 @@ import { ColorKeys, colors } from "@/constants/theme";
 const Details = () => {
   const { results } = useAuth();
   const getColor = (key: ColorKeys) => {
+    if ((key as string) === "very low") {
+      return colors.green;
+    }
     return colors[key];
   };
   return (
     <ScreenWrapper>
-      <View style={styles.container}>
+      <ScrollView style={styles.container}>
         <BackButton iconSize={28} />
         <Typo size={20} fontWeight={"800"} style={{ textAlign: "center" }}>
           Details found on internet
@@ -204,7 +207,7 @@ const Details = () => {
             <Typo size={12}>{results?.SSN?.join("\n")}</Typo>
           </View>
         )}
-      </View>
+      </ScrollView>
     </ScreenWrapper>
   );
 };
