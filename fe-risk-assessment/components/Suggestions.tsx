@@ -75,8 +75,8 @@ const Suggestions = () => {
           marginBottom: 10,
         }}
       >
-        Disclosing any of the following, along with their individual risk
-        scores, may elevate your risk profile.
+        Exposing any of the following information could increase your risk
+        score.
       </Typo>
       <View style={{ flexDirection: "column", flexWrap: "wrap" }}>
         {informationText.length > 0 &&

@@ -165,7 +165,10 @@ const GaugeMeter: React.FC<GaugeMeterProps> = ({
         Your risk level is{" "}
         <Text
           style={{
-            color: colors[score.toLowerCase() as keyof typeof colors],
+            color:
+              score.toLowerCase() === "very low"
+                ? colors.green
+                : colors[score.toLowerCase() as keyof typeof colors],
           }}
         >
           {score}
